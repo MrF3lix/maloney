@@ -156,7 +156,11 @@ class STT4SGDataModule:
                 log.warning("%s: %d clips are not in %s and are skipped", split, missing, self.audio_h5)
             meta = packed
             if meta.empty:
-                raise ValueError(f"no {split} clip found in {self.audio_h5}; was it packed from {self.data_dir}?")
+                raise ValueError(
+                    f"no {split} clip found in {self.audio_h5}: it holds {len(index)} clips "
+                    f"(e.g. {list(index.index[:3])}), the tsv in {self.data_dir} lists e.g. "
+                    f"{list(metas[split]['path'][:3])}. An empty file means packing could not decode the "
+                    "mp3s (see the pack job's log); otherwise it was packed from a different release.")
             self.datasets[split] = STT4SGDataset(meta, self.audio_h5, self.vocabs, self.sample_rate, h5_sample_rate)
             log.info("%s: %d clips, %.1f h, %d speakers", split, len(meta),
                      meta["duration"].sum() / 3600, meta["client_id"].nunique())

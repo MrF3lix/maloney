@@ -10,7 +10,8 @@ contiguous slice per clip instead of opening and decoding a small mp3. Layout of
     length  int64 [n_clips]         number of samples of each clip
     attrs:  sample_rate
 
-Clips that fail to decode are left out and listed at the end (the data module skips them).
+Clips that fail to decode are left out and listed at the end (the data module skips them); if
+more than --max-failed of them fail, something is wrong with the setup and no file is written.
 The file is written to <out>.tmp and renamed when complete.
 
     python scripts/pack_stt4sg_h5.py data/stt4sg-350_v2.1                  # -> <data_dir>/audio_16k.h5
@@ -58,6 +59,7 @@ def main():
     parser.add_argument("--clips-dir", type=Path, help="default: <data_dir>/clips")
     parser.add_argument("--out", type=Path, help="default: <data_dir>/audio_<sr/1000>k.h5")
     parser.add_argument("--sample-rate", type=int, default=16000)
+    parser.add_argument("--max-failed", type=float, default=0.01, help="fraction of clips allowed to fail")
     parser.add_argument("--workers", type=int, default=len(os.sched_getaffinity(0))
                         if hasattr(os, "sched_getaffinity") else os.cpu_count())
     args = parser.parse_args()
@@ -68,6 +70,13 @@ def main():
     tsvs = [args.data_dir / t for t in TSVS if (args.data_dir / t).is_file()]
     # Sorted, the clips of one speaker (<client_id>/...) end up next to each other in the file.
     paths = sorted(set().union(*(pd.read_csv(t, sep="\t", quoting=3, usecols=["path"])["path"] for t in tsvs)))
+    if not paths:
+        raise SystemExit(f"no tsv with a path column found in {args.data_dir}")
+    # Fail in seconds rather than after an hour if the clips are missing or mp3 is unsupported.
+    if all(decode(p, clips_dir, args.sample_rate) is None for p in paths[:10]):
+        raise SystemExit(f"cannot decode any of the first clips in {clips_dir} (libsndfile "
+                         f"{sf.__libsndfile_version__}); are the clips extracted there, and does this "
+                         "libsndfile support mp3 (>= 1.1.0)?")
     log.info("%d clips from %s -> %s (%d Hz, %d workers)", len(paths), ", ".join(t.name for t in tsvs),
              out, args.sample_rate, args.workers)
 
@@ -104,6 +113,9 @@ def main():
                 log.info("%d/%d clips, %.1f h of audio, %.0f clips/s, eta %.0f min", i, len(paths),
                          total / args.sample_rate / 3600, rate, (len(paths) - i) / rate / 60)
         flush()
+        if len(failed) > args.max_failed * len(paths):
+            raise SystemExit(f"{len(failed)}/{len(paths)} clips could not be decoded (e.g. {failed[:5]}), "
+                             f"not writing {out}; see the warnings above")
 
         f.create_dataset("path", data=kept, dtype=h5py.string_dtype())
         f.create_dataset("offset", data=np.asarray(offsets, dtype=np.int64))
