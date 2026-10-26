@@ -15,7 +15,39 @@ run_name: ???
 
 tags: ["dev"]
 
-monitor: val/recon
+# M3: Whisper encoder + linear head over the centroid cells of the training municipalities.
+model:
+  name: openai/whisper-large-v3  # any Whisper checkpoint on the HF Hub
+  pool_layer: null               # encoder layer that is mean-pooled (null = last); higher layers are dropped
+  freeze_layers: 0               # lowest transformer layers kept fixed (the conv front end always is)
+  dropout: 0.0                   # before the head
+  gradient_checkpointing: true   # on CUDA: much less memory for 30 s inputs, ~30 % slower
+
+optim:
+  lr: 5.0e-5          # the paper sweeps 1e-5, 2e-5, 5e-5
+  weight_decay: 0.01
+  warmup_ratio: 0.1   # linear warmup over this share of the steps, then linear decay to 0
+  grad_clip: 1.0
+
+trainer:
+  epochs: 10                # the paper sweeps 3, 5, 10
+  batch_size: 8             # items (clips or segments) per batch
+  eval_batch_size: 32
+  accumulate: 1             # optimizer step every this many batches
+  precision: auto           # auto (bf16, or fp16 without bf16 support, on CUDA; fp32 elsewhere) | bf16 | fp16 | fp32
+  device: null              # default: cuda if available, else cpu
+  log_every: 50             # optimizer steps
+  limit_train_batches: null # for smoke tests
+  limit_eval_batches: null  # for smoke tests (also limits the re-embedding for prototypes)
+
+# Checkpoint selection on the valid head predictions (any metric of maloney.baselines.evaluate, or loss).
+monitor: median_km
+monitor_mode: min
+
+# After training: nearest-prototype inference in these modes (geo.mapping settings), plus the head.
+prototype_modes: [centroid, uniform, gaussian]
+center_embeddings: false  # subtract the mean training embedding before building prototypes
+eval_splits: [valid, test]
 
 ckpt_path: null
 

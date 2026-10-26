@@ -46,6 +46,8 @@ else
 fi
 echo "[$(date +%T)] Node $(hostname): detected ${ACCEL_EXTRA} GPUs"
 
+# Hugging Face model weights (Whisper) are cached once on the scratch disk, not in the home quota.
+export HF_HOME="${HF_HOME:-/raid/persistent_scratch/saaf/huggingface}"
 export UV_PROJECT_ENVIRONMENT="/raid/persistent_scratch/saaf/venvs/maloney-${ACCEL_EXTRA}"
 export UV_LINK_MODE=copy
 export UV_HTTP_TIMEOUT=900

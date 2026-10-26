@@ -1,0 +1,5 @@
+# B1: logistic regression on the dialect region (no grid); the spatial prediction is the region centre.
+_target_: maloney.baselines.methods.LogRegDialect
+C: 1.0             # inverse L2 strength, as in the paper
+max_iter: 1000
+standardize: true  # z-score the embeddings (train statistics) before the regression

@@ -1,0 +1,3 @@
+# whisper-tiny embeddings, for quick local tests.
+path: ${data.data_dir}/embeddings/openai__whisper-tiny.h5
+layer: 2  # extracted: 1, 2, 3, 4

@@ -48,6 +48,19 @@ def featurize(feature_extractor: WhisperFeatureExtractor, audios: list[np.ndarra
             "owner": torch.tensor(owner), "n_clips": torch.tensor(len(audios))}
 
 
+def pool_frames(hidden: torch.Tensor, frames: torch.Tensor, owner: torch.Tensor, n_items: int) -> torch.Tensor:
+    """Mean over the frames with audio of chunk hidden states [n_chunks, T, ...] -> [n_items, ...].
+
+    Chunks of the same item (`owner`) are combined weighted by their number of frames, so the result
+    is the mean over all audio frames of the item. Differentiable (used for fine-tuning too).
+    """
+    mask = (torch.arange(hidden.shape[1], device=hidden.device)[None] < frames[:, None]).to(hidden.dtype)
+    sums = (hidden * mask.view(*mask.shape, *[1] * (hidden.dim() - 2))).sum(1)
+    item_sums = torch.zeros(n_items, *sums.shape[1:], device=sums.device, dtype=sums.dtype).index_add(0, owner, sums)
+    item_frames = torch.zeros(n_items, device=sums.device, dtype=sums.dtype).index_add(0, owner, frames.to(sums.dtype))
+    return item_sums / item_frames.clamp(min=1).view(-1, *[1] * (sums.dim() - 1))
+
+
 class WhisperEmbedder:
     """Mean-pooled hidden states of `layers` of a Whisper encoder (any checkpoint on the HF Hub)."""
 
@@ -69,14 +82,10 @@ class WhisperEmbedder:
         """Pooled embeddings [n_clips, n_layers, dim] (float32) and encoder frames per clip."""
         features = batch["input_features"].to(self.device, self.dtype)
         hidden = self.encoder(features, output_hidden_states=True).hidden_states
-        frames = batch["frames"].to(self.device)
-        mask = (torch.arange(hidden[0].shape[1], device=self.device)[None] < frames[:, None]).float()
-        # Sum (not mean) per chunk, so chunks of one clip can be combined weighted by their frames.
-        sums = torch.stack([(hidden[layer].float() * mask[..., None]).sum(1) for layer in self.layers], 1)
-        owner, n_clips = batch["owner"].to(self.device), int(batch["n_clips"])
-        clip_sums = torch.zeros(n_clips, *sums.shape[1:], device=self.device).index_add_(0, owner, sums)
+        frames, owner, n_clips = batch["frames"].to(self.device), batch["owner"].to(self.device), int(batch["n_clips"])
+        stacked = torch.stack([hidden[layer].float() for layer in self.layers], 2)  # [chunks, T, layers, dim]
+        pooled = pool_frames(stacked, frames, owner, n_clips)
         clip_frames = torch.zeros(n_clips, device=self.device).index_add_(0, owner, frames.float())
-        pooled = clip_sums / clip_frames.clamp(min=1)[:, None, None]
         return pooled.cpu().numpy(), clip_frames.cpu().numpy().astype(np.int32)
 
     def embed(self, audios: list[np.ndarray]) -> tuple[np.ndarray, np.ndarray]:

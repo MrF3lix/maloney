@@ -1,0 +1,8 @@
+# M2: prototype network, linear projection + learned temperature, trained on centroid cells.
+_target_: maloney.baselines.methods.ProtoNet
+lr: 1.0e-3        # Adam, as in the paper
+epochs: 50
+batch_size: 256
+temperature: 10.0 # initial value of the learned temperature
+device: null      # default: cuda if available, else cpu
+seed: ${seed}

@@ -82,6 +82,23 @@ uv run baseline -m method=b1,b2,m1,m2 geo.mapping.mode=centroid,uniform,gaussian
 `unit=clip|segment|speaker` sets what is classified; `embeddings.layer` the Whisper layer. Metrics go to
 `metrics.json`, per-unit predictions to `predictions_<split>_<unit>.csv` in the run directory.
 
+### M3: fine-tuned Whisper
+
+`uv run train` fine-tunes a Whisper encoder (`model.name`, default whisper-large-v3) with a linear head
+over the centroid cells of the training municipalities (cross-entropy, AdamW, warmup + linear decay,
+bf16/fp16 on CUDA). Items are clips, or segments with `data.segment_duration`. Every epoch the head is
+evaluated on valid; `checkpoints/best.pt` is kept by `monitor` (default valid median km) and
+`checkpoints/last.pt` allows resuming (`train.submit` does this when given the same `RUN_DIR`).
+Afterwards, as in the paper, the head is replaced by nearest-prototype inference: train/valid/test are
+re-embedded with the best weights and evaluated in every mode of `prototype_modes` (plus the head) into
+`metrics.json`, with predictions per mode.
+
+```bash
+RUN_NAME=m3 sbatch train.submit optim.lr=2e-5 trainer.epochs=5 model.pool_layer=24
+uv run train run_name=smoke logger=none model.name=openai/whisper-tiny trainer.device=mps \
+    trainer.epochs=1 trainer.limit_train_batches=10 trainer.limit_eval_batches=5   # local smoke test
+```
+
 ### Speaker-disjoint split
 
 `scripts/make_speaker_split.py` pools all clips and assigns every speaker to one split: test and valid

@@ -1,0 +1,24 @@
+# @package _global_
+# Baselines on precomputed embeddings: uv run baseline method=b2 geo.mapping.mode=uniform
+
+defaults:
+  - _self_
+  - paths: default
+  - data: stt4sg-350
+  - geo: default
+  - embeddings: whisper-large-v3
+  - method: b2
+  - logger: none
+  - hydra: default
+  - experiment: null
+
+task_name: baseline
+
+run_name: ${hydra:runtime.choices.method}
+
+tags: ["baseline"]
+
+unit: clip  # clip | segment (needs data.segment_duration) | speaker; results are also reported per speaker
+eval_splits: [valid, test]
+
+seed: 1234

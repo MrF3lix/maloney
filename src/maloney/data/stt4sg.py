@@ -338,18 +338,23 @@ class STT4SGDataModule:
             if shared := speakers[a] & speakers[b]:
                 raise ValueError(f"{len(shared)} speakers are in both {a} and {b}, e.g. {sorted(shared)[:3]}")
 
-    def sampler(self, split: str) -> SpeakerSegmentSampler | None:
+    def sampler(self, split: str, shuffle: bool | None = None) -> SpeakerSegmentSampler | None:
+        """Segment sampler of a split (None without segment_duration); shuffles train by default."""
         if self.segment_duration is None:
             return None
         dataset = self.datasets[split]
         return SpeakerSegmentSampler(dataset.meta["client_id"], dataset.durations, self.segment_duration,
-                                     shuffle=split == "train", seed=self.seed)
+                                     shuffle=split == "train" if shuffle is None else shuffle, seed=self.seed)
 
-    def dataloader(self, split: str) -> DataLoader:
-        sampler = self.sampler(split)
-        return DataLoader(self.datasets[split], batch_size=self.batch_size,
-                          shuffle=split == "train" and sampler is None, sampler=sampler,
-                          num_workers=self.num_workers, collate_fn=collate,
+    def dataloader(self, split: str, shuffle: bool | None = None, collate_fn=None,
+                   batch_size: int | None = None) -> DataLoader:
+        """Dataloader of a split. Train is shuffled by default; `shuffle=False` gives the fixed order of
+        `sampler(split, shuffle=False).segments(0)` (or of the clips). `collate_fn` replaces `collate`."""
+        shuffle = split == "train" if shuffle is None else shuffle
+        sampler = self.sampler(split, shuffle)
+        return DataLoader(self.datasets[split], batch_size=batch_size or self.batch_size,
+                          shuffle=shuffle and sampler is None, sampler=sampler,
+                          num_workers=self.num_workers, collate_fn=collate_fn or collate,
                           pin_memory=torch.cuda.is_available(), persistent_workers=self.num_workers > 0)
 
     def train_dataloader(self) -> DataLoader:

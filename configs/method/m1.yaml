@@ -1,0 +1,5 @@
+# M1: logistic regression on centroid cells (classes: cells holding a training municipality).
+_target_: maloney.baselines.methods.LogRegCells
+C: 1.0
+max_iter: 1000
+standardize: true

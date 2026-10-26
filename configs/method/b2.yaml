@@ -1,0 +1,3 @@
+# B2: nearest cell prototype by cosine similarity; prototypes follow geo.mapping.mode.
+_target_: maloney.baselines.methods.NearestPrototype
+center: false  # subtract the mean training embedding before normalising (not in the paper)

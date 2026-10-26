@@ -26,7 +26,4 @@ set -euo pipefail
 cd "${SLURM_SUBMIT_DIR:-$(pwd)}"
 source scripts/slurm_setup.sh
 
-# Model weights are cached once on the persistent scratch disk instead of the home quota.
-export HF_HOME="${HF_HOME:-/raid/persistent_scratch/saaf/huggingface}"
-
 run uv run --no-sync python scripts/extract_whisper_embeddings.py "$@"
