@@ -27,3 +27,10 @@ The official split is used: `train_all.tsv` (or `data.train_split=train_balanced
 ```bash
 uv run train run_name=dev logger=none
 ```
+
+For a smoke test with only part of the release downloaded (e.g. `test.tsv` + `clips__test.tar`,
+packed as above), `data.only_split=test` reads just that split and uses it for train, valid and test:
+
+```bash
+uv run train run_name=smoke logger=none data.only_split=test
+```

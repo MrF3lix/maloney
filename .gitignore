@@ -11,7 +11,7 @@ wheels/
 .env
 
 # Data and run outputs
-/data/
+data/
 logs/
 outputs/
 wandb/

@@ -119,14 +119,22 @@ def collate(items: list[dict]) -> dict:
 
 
 class STT4SGDataModule:
-    """Builds the three splits with shared label vocabularies and hands out their dataloaders."""
+    """Builds the three splits with shared label vocabularies and hands out their dataloaders.
+
+    With `only_split` (e.g. "test"), only that split's tsv is read and it stands in for train, valid
+    and test, so the whole pipeline runs on a partial download (smoke tests). Label ids then come
+    from that split alone.
+    """
 
     def __init__(self, data_dir: str, audio_h5: str, train_split: str = "train_all",
-                 sample_rate: int = 16000, max_duration: float | None = None,
+                 only_split: str | None = None, sample_rate: int = 16000, max_duration: float | None = None,
                  batch_size: int = 32, num_workers: int = 4):
+        if only_split is not None and only_split not in SPLITS:
+            raise ValueError(f"only_split must be one of {SPLITS}, got {only_split!r}")
         self.data_dir = Path(data_dir)
         self.audio_h5 = Path(audio_h5)
         self.train_split = train_split
+        self.only_split = only_split
         self.sample_rate = sample_rate
         self.max_duration = max_duration
         self.batch_size = batch_size
@@ -143,7 +151,12 @@ class STT4SGDataModule:
         if h5_sample_rate != self.sample_rate:
             log.warning("%s holds %d Hz audio, resampling every clip to %d Hz on the fly",
                         self.audio_h5, h5_sample_rate, self.sample_rate)
-        metas = {split: read_split(self.data_dir, split, self.train_split) for split in SPLITS}
+        if self.only_split is not None:
+            log.warning("only_split=%s: using it as train, valid and test", self.only_split)
+            meta = read_split(self.data_dir, self.only_split, self.train_split)
+            metas = {split: meta for split in SPLITS}
+        else:
+            metas = {split: read_split(self.data_dir, split, self.train_split) for split in SPLITS}
         # Vocabularies come from every split so a label missing from train still gets an id.
         all_meta = pd.concat(metas.values())
         self.vocabs = {col: LabelVocab(all_meta[col]) for col in ("dialect_region", "canton")}
