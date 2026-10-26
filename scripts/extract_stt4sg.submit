@@ -14,7 +14,7 @@
 #SBATCH --open-mode=append
 
 # Extract the STT4SG-350 clip tars into <data_dir>/clips/ so that the `path` column of the tsv
-# files (<client_id>/<hash>.mp3) resolves relative to it. Leading folders inside the tars are
+# files (<client_id>/<hash>.<ext>) resolves relative to it. Leading folders inside the tars are
 # stripped automatically. Needs ~26 GB free next to the tars; the tars are kept.
 #
 #   sbatch scripts/extract_stt4sg.submit <data_dir>
@@ -35,9 +35,9 @@ fi
 mkdir -p "${CLIPS}"
 
 for TAR in "${DATA_DIR}"/clips__test.tar "${DATA_DIR}"/clips__train_valid.tar; do
-    # Depth of the first mp3 minus <client_id>/<file> = number of leading folders to strip.
+    # Depth of the first clip minus <client_id>/<file> = number of leading folders to strip.
     # (grep -m1 stops tar early with SIGPIPE, which pipefail would turn into a failure)
-    FIRST="$(set +o pipefail; tar -tf "${TAR}" | grep -m1 '\.mp3$')"
+    FIRST="$(set +o pipefail; tar -tf "${TAR}" | grep -m1 -E '\.(mp3|flac|wav|ogg)$')"
     STRIP=$(( $(echo "${FIRST#./}" | tr -cd '/' | wc -c) - 1 ))
     echo "[$(date +%T)] extracting ${TAR} (first entry ${FIRST}, stripping ${STRIP})"
     tar -xf "${TAR}" -C "${CLIPS}" --strip-components="${STRIP}"
@@ -46,5 +46,5 @@ done
 # Every path listed in the tsv files must now exist.
 MISSING=$(tail -q -n +2 "${DATA_DIR}"/{train_all,valid,test}.tsv | cut -f1 \
     | while read -r P; do [ -f "${CLIPS}/${P}" ] || echo "${P}"; done | wc -l)
-echo "[$(date +%T)] done: $(find "${CLIPS}" -name '*.mp3' | wc -l) clips, ${MISSING} tsv paths missing"
+echo "[$(date +%T)] done: $(find "${CLIPS}" -type f | wc -l) clips, ${MISSING} tsv paths missing"
 [ "${MISSING}" -eq 0 ]

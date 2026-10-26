@@ -2,10 +2,10 @@
 
 All clips referenced by the release's tsv files are decoded, mixed to mono, resampled to
 `--sample-rate` and stored as int16 back to back in one flat dataset, so training reads one
-contiguous slice per clip instead of opening and decoding a small mp3. Layout of the file:
+contiguous slice per clip instead of opening and decoding a small file. Layout of the file:
 
     audio   int16 [total_samples]   all clips concatenated
-    path    str   [n_clips]         the tsv `path` column (<client_id>/<hash>.mp3), sorted
+    path    str   [n_clips]         the tsv `path` column (<client_id>/<hash>.<ext>), sorted
     offset  int64 [n_clips]         start of each clip in `audio`
     length  int64 [n_clips]         number of samples of each clip
     attrs:  sample_rate
@@ -39,12 +39,27 @@ log = logging.getLogger("pack_stt4sg_h5")
 TSVS = ("train_all.tsv", "train_balanced.tsv", "valid.tsv", "test.tsv")
 CHUNK = 1 << 17           # samples per HDF5 chunk (256 KB); a typical clip spans 1-3 chunks
 FLUSH = 1 << 26           # samples buffered in memory before they are appended to the file
+# The tsv's extension does not always match the files in the tars (e.g. .flac listed, .mp3 shipped).
+AUDIO_EXTS = (".mp3", ".flac", ".wav", ".ogg")
+
+
+def find_clip(path: str, clips_dir: Path) -> Path | None:
+    """The file for a tsv `path`, also under another audio extension; None if there is none."""
+    file = clips_dir / path
+    for candidate in (file, *(file.with_suffix(ext) for ext in AUDIO_EXTS if ext != file.suffix)):
+        if candidate.is_file():
+            return candidate
+    return None
 
 
 def decode(path: str, clips_dir: Path, sample_rate: int) -> np.ndarray | None:
+    file = find_clip(path, clips_dir)
+    if file is None:
+        log.warning("not found: %s (also tried %s)", clips_dir / path, "/".join(AUDIO_EXTS))
+        return None
     try:
-        audio, sr = sf.read(clips_dir / path, dtype="float32", always_2d=True)
-    except Exception as e:  # noqa: BLE001 - one broken mp3 should not end an hour-long job
+        audio, sr = sf.read(file, dtype="float32", always_2d=True)
+    except Exception as e:  # noqa: BLE001 - one broken clip should not end an hour-long job
         log.warning("cannot decode %s: %s", path, e)
         return None
     audio = audio.mean(axis=1)
@@ -72,11 +87,12 @@ def main():
     paths = sorted(set().union(*(pd.read_csv(t, sep="\t", quoting=3, usecols=["path"])["path"] for t in tsvs)))
     if not paths:
         raise SystemExit(f"no tsv with a path column found in {args.data_dir}")
-    # Fail in seconds rather than after an hour if the clips are missing or mp3 is unsupported.
+    # Fail in seconds rather than after an hour if the clips are missing or unreadable.
     if all(decode(p, clips_dir, args.sample_rate) is None for p in paths[:10]):
+        found = next((str(f.relative_to(clips_dir)) for f in clips_dir.rglob("*") if f.is_file()), None)
         raise SystemExit(f"cannot decode any of the first clips in {clips_dir} (libsndfile "
-                         f"{sf.__libsndfile_version__}); are the clips extracted there, and does this "
-                         "libsndfile support mp3 (>= 1.1.0)?")
+                         f"{sf.__libsndfile_version__}): the tsv lists e.g. {paths[0]}, the folder holds e.g. "
+                         f"{found}. Are the clips extracted there, with <client_id>/<file> directly below it?")
     log.info("%d clips from %s -> %s (%d Hz, %d workers)", len(paths), ", ".join(t.name for t in tsvs),
              out, args.sample_rate, args.workers)
 
