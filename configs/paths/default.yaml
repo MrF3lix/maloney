@@ -1,0 +1,5 @@
+# PROJECT_ROOT is set by rootutils; DATA_DIR can point at a shared data folder (e.g. in .env).
+root_dir: ${oc.env:PROJECT_ROOT}
+data_dir: ${oc.env:DATA_DIR,${paths.root_dir}/data}
+log_dir: ${paths.root_dir}/logs
+output_dir: ${hydra:runtime.output_dir}

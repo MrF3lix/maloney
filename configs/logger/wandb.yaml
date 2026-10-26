@@ -1,0 +1,8 @@
+wandb:
+  _target_: maloney.training.loggers.WandbLogger
+  save_dir: ${paths.output_dir}
+  project: maloney
+  entity: felix-saaro-zhaw
+  id: null
+  offline: false
+  tags: ${tags}
