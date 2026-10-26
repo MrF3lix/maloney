@@ -28,6 +28,11 @@ rocm = [
     "triton-rocm; platform_machine == 'x86_64' and sys_platform == 'linux'",
 ]
 wandb = ["wandb"]
+geo = [
+    "geopandas>=1.2.0",
+    "ipykernel>=7.4.0",
+    "matplotlib>=3.11.2",
+]
 
 [project.scripts]
 train = "maloney.train:main"
