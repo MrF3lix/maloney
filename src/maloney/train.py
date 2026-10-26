@@ -6,7 +6,7 @@ import rootutils
 from omegaconf import DictConfig
 
 rootutils.setup_root(__file__, indicator=".project-root", pythonpath=True)
-CONFIG_PATH = str(Path(__file__).resolve().parents[2] / "config")
+CONFIG_PATH = str(Path(__file__).resolve().parents[2] / "configs")
 log = logging.getLogger(__name__)
 
 
