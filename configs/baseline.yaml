@@ -18,7 +18,7 @@ run_name: dev
 
 tags: ["baseline"]
 
-unit: segment  # clip | segment (needs data.segment_duration) | speaker; results are also reported per speaker
+unit: clip  # clip | segment (needs data.segment_duration) | speaker; results are also reported per speaker
 eval_splits: [valid, test]
 
 seed: 1234
