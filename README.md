@@ -6,7 +6,8 @@ rather than only dialect labels.
 ## Setup
 
 ```bash
-uv sync
+uv sync --extra cu128 --extra wandb   # Volta+ GPUs; cu126 for Pascal (P40), rocm for AMD
+uv sync --extra wandb                 # macOS / CPU: PyPI torch
 ```
 
 ### Data
