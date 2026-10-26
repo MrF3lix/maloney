@@ -14,7 +14,7 @@ defaults:
 
 task_name: baseline
 
-run_name: ${hydra:runtime.choices.method}
+run_name: dev
 
 tags: ["baseline"]
 
