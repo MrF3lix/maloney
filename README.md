@@ -45,6 +45,22 @@ it as in Ahmadi & Sennrich (2026): `geo.mapping.mode=centroid` (the cell of the 
 `gaussian` (kernel of `geo.mapping.sigma` metres).
 `playground/02_grid_modes.ipynb` shows the three modes; `uv run pytest` tests them.
 
+### Whisper embeddings
+
+Experiments on frozen embeddings read them precomputed: `scripts/extract_whisper_embeddings.py` runs
+a Whisper encoder (default `openai/whisper-large-v3`, any Whisper checkpoint via `--model`) over every
+clip of `audio_16k.h5` and stores the mean-pooled hidden states of 8 evenly spaced layers (`--layers`)
+in `<data_dir>/embeddings/<model>.h5`. Clips are padded to Whisper's 30 s input, and only frames with
+audio are averaged. A job that hits the time limit resumes when submitted again:
+
+```bash
+sbatch scripts/extract_whisper_embeddings.submit data/stt4sg-350_v2-1
+```
+
+`maloney.embeddings.EmbeddingStore` loads a layer and returns embeddings per clip (`for_meta`), per
+segment (`for_segments`, for `SpeakerSegmentSampler` groups) or per speaker (`by_speaker`), pooling
+clips weighted by their number of frames.
+
 ### Speaker-disjoint split
 
 `scripts/make_speaker_split.py` pools all clips and assigns every speaker to one split: test and valid
