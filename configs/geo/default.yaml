@@ -1,0 +1,12 @@
+# Grid over Switzerland and how municipalities (geolects) are mapped onto it, see maloney.geo.
+grid:
+  _target_: maloney.geo.Grid.from_file
+  regions: ${paths.data_dir}/geo/cantons.geojson  # from scripts/build_zip_geo.py
+  cell_size: 5000  # metres (LV95)
+mapping:
+  _target_: maloney.geo.CellMapping
+  mode: centroid  # centroid | uniform (spread over the municipality and its neighbours) | gaussian
+  sigma: 10000    # metres, gaussian kernel around the municipality centroid
+  eps: 1.0e-3     # gaussian: drop weights below this fraction of the peak
+  neighbour_distance: 2000  # uniform: same-canton municipalities whose border is within this many metres (0 = adjacent)
+  municipalities: ${paths.data_dir}/geo/municipalities.geojson  # from scripts/build_zip_geo.py

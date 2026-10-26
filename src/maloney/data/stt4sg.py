@@ -38,9 +38,10 @@ SPLITS = ("train", "valid", "test")
 TRAIN_FILES = {"train_all": "train_all.tsv", "train_balanced": "train_balanced.tsv"}
 
 
-# Columns of zip_municipality.csv attached to every clip: the speaker's municipality and its centroid
+# Columns of zip_municipality.csv attached to every clip: the speaker's municipality, its canton
+# (`canton` there, renamed so it does not clash with the speaker's canton in the tsv) and its centroid
 # in LV95 (E/N, metres) and WGS84 (lat/lon).
-GEO_COLUMNS = ["bfs_nr", "municipality", "muni_E", "muni_N", "muni_lat", "muni_lon"]
+GEO_COLUMNS = ["bfs_nr", "municipality", "muni_canton", "muni_E", "muni_N", "muni_lat", "muni_lon"]
 
 
 def read_split(data_dir: str | Path, split: str, train_split: str = "train_all",
@@ -60,7 +61,8 @@ def read_split(data_dir: str | Path, split: str, train_split: str = "train_all",
 
 def read_geo_table(geo_table: str | Path) -> pd.DataFrame:
     """zip code -> municipality and centroid coordinates (GEO_COLUMNS), indexed by zip code."""
-    geo = pd.read_csv(geo_table, dtype={"zipcode": str}, usecols=["zipcode", *GEO_COLUMNS])
+    geo = pd.read_csv(geo_table, dtype={"zipcode": str}).rename(columns={"canton": "muni_canton"})
+    geo = geo[["zipcode", *GEO_COLUMNS]]
     return geo.dropna(subset=["bfs_nr", "muni_E"]).astype({"bfs_nr": int}).set_index("zipcode")
 
 

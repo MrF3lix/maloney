@@ -15,9 +15,14 @@ def train(cfg: DictConfig):
     datamodule = hydra.utils.instantiate(cfg.data)
     datamodule.setup()
     log.info("dialect regions: %s", datamodule.vocabs["dialect_region"].itos)
+    grid = hydra.utils.instantiate(cfg.geo.grid)
+    mapping = hydra.utils.instantiate(cfg.geo.mapping)
+    log.info("%s, mapping %s", grid, mapping)
 
     batch = next(iter(datamodule.train_dataloader()))
     log.info("train batch: audio %s, dialect %s", tuple(batch["audio"].shape), batch["dialect"].tolist())
+    if "lv95" in batch:
+        log.info("train batch: cells %s", grid.cell_of(batch["lv95"]).tolist())
     log.info('Done')
 
 

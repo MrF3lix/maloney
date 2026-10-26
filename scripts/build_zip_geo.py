@@ -15,6 +15,11 @@ Outputs, next to the tsv files in `data_dir`:
                             municipality coordinates, speakers/clips/hours, dialect region
   geo.gpkg                  layers `municipalities` and `zips`: every polygon in Switzerland with
                             the dataset counts (0 where no speaker lives), for plotting
+and, independent of the dataset, in `--geo-dir`:
+  cantons.geojson           canton polygons (LV95, simplified to 20 m), the municipalities dissolved
+                            by canton; the grid (maloney.geo.grid) is built from them
+  municipalities.geojson    municipality polygons (LV95, simplified to 20 m) with BFS number and
+                            canton; the uniform mode (maloney.geo.mapping) spreads over them
 
     uv run --extra geo python scripts/build_zip_geo.py data/stt4sg-350_v2-1
 """
@@ -121,8 +126,20 @@ def main():
     munis_out.to_file(out_gpkg, layer="municipalities", driver="GPKG")
     zips_out.to_file(out_gpkg, layer="zips", driver="GPKG")
 
-    log.info("%d zips of %d speakers -> %d municipalities; wrote %s and %s (layers municipalities, zips)",
-             len(table), table["n_speakers"].sum(), table["bfs_nr"].nunique(), out_csv, out_gpkg)
+    cantons = munis[["canton", "geometry"]].dissolve("canton").reset_index()
+    cantons["geometry"] = cantons.geometry.simplify(20)
+    out_cantons = args.geo_dir / "cantons.geojson"
+    out_cantons.unlink(missing_ok=True)
+    cantons.to_file(out_cantons, driver="GeoJSON", COORDINATE_PRECISION=1)
+
+    out_munis = args.geo_dir / "municipalities.geojson"
+    out_munis.unlink(missing_ok=True)
+    munis[["bfs_nr", "municipality", "canton", "geometry"]].assign(geometry=munis.geometry.simplify(20)).to_file(
+        out_munis, driver="GeoJSON", COORDINATE_PRECISION=1)
+
+    log.info("%d zips of %d speakers -> %d municipalities; wrote %s, %s (layers municipalities, zips), %s "
+             "(%d cantons) and %s (%d municipalities)", len(table), table["n_speakers"].sum(),
+             table["bfs_nr"].nunique(), out_csv, out_gpkg, out_cantons, len(cantons), out_munis, len(munis))
 
 
 if __name__ == "__main__":

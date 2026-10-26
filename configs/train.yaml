@@ -4,6 +4,7 @@ defaults:
   - _self_
   - paths: default
   - data: stt4sg-350
+  - geo: default
   - logger: wandb
   - hydra: default
   - experiment: null

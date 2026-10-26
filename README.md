@@ -35,6 +35,16 @@ uv sync --extra geo
 uv run --extra geo python scripts/build_zip_geo.py data/stt4sg-350_v2-1
 ```
 
+### Grid
+
+`maloney.geo` puts Switzerland on a square LV95 grid (`geo.grid.cell_size`, default 10 km; only cells
+overlapping Switzerland are kept, built from `data/geo/cantons.geojson`) and maps municipalities onto
+it as in Ahmadi & Sennrich (2026): `geo.mapping.mode=centroid` (the cell of the municipality centroid),
+`uniform` (evenly over the area of the municipality and its neighbours in the same canton,
+`geo.mapping.neighbour_distance` metres, 0 = adjacent; needs `data/geo/municipalities.geojson`) or
+`gaussian` (kernel of `geo.mapping.sigma` metres).
+`playground/02_grid_modes.ipynb` shows the three modes; `uv run pytest` tests them.
+
 ### Speaker-disjoint split
 
 `scripts/make_speaker_split.py` pools all clips and assigns every speaker to one split: test and valid
