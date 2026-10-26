@@ -25,6 +25,13 @@ cd "${SLURM_SUBMIT_DIR:-$(pwd)}"
 
 DATA_DIR="${1:?usage: sbatch scripts/extract_stt4sg.submit <data_dir>}"
 CLIPS="${DATA_DIR}/clips"
+# A symlink into a disk the compute node does not mount looks like a file here, not a folder.
+if [ ! -d "${DATA_DIR}" ] || [ ! -f "${DATA_DIR}/clips__test.tar" ]; then
+    echo "ERROR: ${DATA_DIR} is not a readable dataset folder on $(hostname) (cwd $(pwd)):" >&2
+    ls -ld "${DATA_DIR}" >&2 || true
+    if [ -L "${DATA_DIR}" ]; then echo "symlink to: $(readlink "${DATA_DIR}")" >&2; fi
+    exit 1
+fi
 mkdir -p "${CLIPS}"
 
 for TAR in "${DATA_DIR}"/clips__test.tar "${DATA_DIR}"/clips__train_valid.tar; do

@@ -1,0 +1,36 @@
+#!/bin/bash
+#SBATCH --time=240
+#SBATCH --job-name=pack_stt4sg_h5
+#SBATCH --ntasks=1
+#SBATCH --cpus-per-task=16
+#SBATCH --nodes=1
+#SBATCH --mem=16G
+#SBATCH --partition=cpu
+#SBATCH --account=cai_nlp
+#SBATCH --mail-user=saaf@zhaw.ch
+#SBATCH --mail-type=END,FAIL
+#SBATCH --output=logs/slurm/%j_%N.out
+#SBATCH --error=logs/slurm/%j_%N.err
+#SBATCH --open-mode=append
+
+# Decode the extracted STT4SG-350 clips into one HDF5 file, <data_dir>/audio_16k.h5 (~40 GB of
+# int16 for 16 kHz). Run after scripts/extract_stt4sg.submit; extra arguments go to the python
+# script (--sample-rate, --out, --workers). Afterwards clips/ is no longer needed for training.
+#
+#   sbatch scripts/pack_stt4sg_h5.submit <data_dir>
+#   bash scripts/pack_stt4sg_h5.submit data/stt4sg-350_v2.1 --workers 4     # without SLURM
+
+set -euo pipefail
+cd "${SLURM_SUBMIT_DIR:-$(pwd)}"
+
+DATA_DIR="${1:?usage: sbatch scripts/pack_stt4sg_h5.submit <data_dir> [args]}"
+shift
+if [ ! -d "${DATA_DIR}/clips" ]; then
+    echo "ERROR: ${DATA_DIR}/clips not found on $(hostname); run scripts/extract_stt4sg.submit first" >&2
+    exit 1
+fi
+
+# CPU node: no GPU torch venv needed, only the packages the script imports.
+export PATH="${HOME}/.local/bin:${HOME}/.cargo/bin:${PATH}"
+uv run --no-project --with h5py --with numpy --with pandas --with soundfile --with soxr \
+    python scripts/pack_stt4sg_h5.py "${DATA_DIR}" --workers "${SLURM_CPUS_PER_TASK:-4}" "$@"

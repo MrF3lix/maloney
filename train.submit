@@ -1,0 +1,48 @@
+#!/bin/bash
+#SBATCH --time=720
+#SBATCH --job-name=maloney
+#SBATCH --ntasks=1
+#SBATCH --cpus-per-task=10
+#SBATCH --nodes=1
+#SBATCH --partition=gpu_top
+#SBATCH --mem=24G
+#SBATCH --gres=gpu:1
+#SBATCH --account=cai_nlp
+#SBATCH --mail-user=saaf@zhaw.ch
+#SBATCH --mail-type=END,FAIL
+#SBATCH --output=logs/slurm/%j_%N.out
+#SBATCH --error=logs/slurm/%j_%N.err
+#SBATCH --open-mode=append
+
+# Train on a GPU node; extra arguments are passed to hydra as overrides.
+#
+#   sbatch train.submit                                  # run_name=dev
+#   RUN_NAME=geo EXP_NAME=<experiment> sbatch train.submit data.batch_size=64
+#   RUN_DIR=logs/train/geo/runs/<dir> sbatch train.submit    # resume from its last.pt
+#   DRY_RUN=1 bash train.submit                          # print the command, run nothing
+
+set -euo pipefail
+cd "${SLURM_SUBMIT_DIR:-$(pwd)}"
+source scripts/slurm_setup.sh
+
+RUN_NAME="${RUN_NAME:-dev}"
+RUN_DIR="${RUN_DIR:-logs/train/${RUN_NAME}/runs/$(date +%Y-%m-%d_%H-%M-%S)_${SLURM_JOB_ID:-manual}}"
+run mkdir -p "${RUN_DIR}"
+echo "[$(date +%T)] train run_name=${RUN_NAME} experiment=${EXP_NAME:-none} -> ${RUN_DIR}"
+
+EXTRA=()
+if [ -n "${EXP_NAME:-}" ]; then
+    EXTRA+=(experiment="${EXP_NAME}")
+fi
+if [ -f "${RUN_DIR}/checkpoints/last.pt" ]; then
+    EXTRA+=(ckpt_path="${RUN_DIR}/checkpoints/last.pt")
+    echo "[$(date +%T)] resuming from ${RUN_DIR}/checkpoints/last.pt"
+fi
+
+run uv run --no-sync train \
+    run_name="${RUN_NAME}" \
+    hydra.run.dir="${RUN_DIR}" \
+    ${EXTRA[@]+"${EXTRA[@]}"} \
+    logger=wandb \
+    logger.wandb.id="maloney_$(basename "${RUN_DIR}")" \
+    "$@"
