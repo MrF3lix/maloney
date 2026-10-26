@@ -38,6 +38,7 @@ from maloney.training.loggers import build_logger  # noqa: E402
 
 CONFIG_PATH = str(Path(__file__).resolve().parents[2] / "configs")
 log = logging.getLogger(__name__)
+MAX_NONFINITE = 20  # consecutive batches with a nan/inf loss before training is stopped
 
 
 class HeadMethod:
@@ -105,6 +106,9 @@ def train(cfg: DictConfig):
     mc = cfg.model
     model = WhisperGeoClassifier(mc.name, len(classes), mc.pool_layer, mc.freeze_layers, mc.dropout,
                                  mc.gradient_checkpointing and device.type == "cuda").to(device)
+    weight_dtypes = {p.dtype for p in model.parameters()}
+    if weight_dtypes != {torch.float32}:
+        raise ValueError(f"the model weights must be float32 for training, got {weight_dtypes}")
     total, trainable = model.n_parameters()
     log.info("%s pooled at layer %d: %.1fM parameters, %.1fM trainable; %s, autocast %s", mc.name,
              model.pool_layer, total / 1e6, trainable / 1e6, device, dtype)
@@ -141,6 +145,7 @@ def train(cfg: DictConfig):
         log.info("resumed from %s after epoch %d (step %d)", cfg.ckpt_path, state["epoch"] + 1, step)
 
     logger = build_logger(cfg)
+    nonfinite = 0
     for epoch in range(start_epoch, tc.epochs):
         model.train()
         start, running, seen = time.time(), 0.0, 0
@@ -152,6 +157,17 @@ def train(cfg: DictConfig):
             with torch.autocast(device.type, dtype=dtype, enabled=dtype is not None):
                 logits = model(batch)
             loss = torch.nn.functional.cross_entropy(logits.float(), targets, ignore_index=-1)
+            if not torch.isfinite(loss):
+                # fp16 can overflow now and then (the batch is skipped); persistent nan means diverged weights.
+                nonfinite += 1
+                log.warning("epoch %d batch %d: loss %s, batch skipped (%d in a row)", epoch + 1, i + 1,
+                            loss.item(), nonfinite)
+                if nonfinite >= MAX_NONFINITE:
+                    raise FloatingPointError(f"{nonfinite} batches in a row had a non-finite loss: training "
+                                             "diverged (try a lower optim.lr or trainer.precision=bf16/fp32)")
+                optimizer.zero_grad()
+                continue
+            nonfinite = 0
             scaler.scale(loss / tc.accumulate).backward()
             running, seen = running + loss.item() * len(targets), seen + len(targets)
             if (i + 1) % tc.accumulate == 0:

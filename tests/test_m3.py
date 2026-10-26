@@ -44,3 +44,29 @@ def test_model_trains_on_a_batch():
         losses.append(loss.item())
     assert losses[-1] < losses[0]
     assert model.encoder.conv1.weight.grad is None and model.encoder.layers[0].fc1.weight.grad is None
+
+
+@pytest.mark.skipif(not tiny_cached, reason="needs openai/whisper-tiny in the Hugging Face cache")
+def test_float16_checkpoint_trains_in_float32(tmp_path):
+    """whisper-large-v3 is stored in float16; training its weights in float16 with AdamW gives nan."""
+    from transformers import WhisperFeatureExtractor, WhisperModel
+
+    WhisperModel.from_pretrained(TINY, dtype=torch.float16).save_pretrained(tmp_path)
+    WhisperFeatureExtractor.from_pretrained(TINY).save_pretrained(tmp_path)
+    model = WhisperGeoClassifier(str(tmp_path), n_classes=3)
+    assert {p.dtype for p in model.parameters()} == {torch.float32}
+
+    rng = np.random.default_rng(0)
+    items = [{"audio": torch.tensor(rng.normal(0, 0.1, 16_000 * 3).astype(np.float32)), "dialect": 0, "canton": 0,
+              "zipcode": "8000", "client_id": "a", "path": "p", "n_clips": 1} for _ in range(3)]
+    batch = WhisperCollate(str(tmp_path))(items)
+    optimizer = torch.optim.AdamW([p for p in model.parameters() if p.requires_grad], lr=5e-5)
+    for _ in range(5):
+        with torch.autocast("cpu", dtype=torch.bfloat16):
+            logits = model(batch)
+        loss = torch.nn.functional.cross_entropy(logits.float(), torch.tensor([0, 1, 2]))
+        optimizer.zero_grad()
+        loss.backward()
+        optimizer.step()
+        assert torch.isfinite(loss)
+    assert all(torch.isfinite(p).all() for p in model.parameters())

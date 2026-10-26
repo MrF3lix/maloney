@@ -37,7 +37,10 @@ class WhisperGeoClassifier(nn.Module):
                  dropout: float = 0.0, gradient_checkpointing: bool = False):
         super().__init__()
         self.model_name = model
-        self.encoder = WhisperModel.from_pretrained(model).get_encoder()
+        # float32 weights whatever the checkpoint holds (large-v3 is stored in float16, and transformers
+        # loads that by default): AdamW on float16 weights underflows and turns the weights into nan.
+        # Mixed precision only lowers the precision of the computation (torch.autocast in maloney.train).
+        self.encoder = WhisperModel.from_pretrained(model, dtype=torch.float32).get_encoder()
         n_layers = self.encoder.config.encoder_layers
         self.pool_layer = n_layers if pool_layer is None else pool_layer
         if not 1 <= self.pool_layer <= n_layers:
