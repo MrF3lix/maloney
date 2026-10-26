@@ -35,7 +35,26 @@ uv sync --extra geo
 uv run --extra geo python scripts/build_zip_geo.py data/stt4sg-350_v2-1
 ```
 
-The official split is used: `train_all.tsv` (or `data.train_split=train_balanced`), `valid.tsv`, `test.tsv`.
+### Speaker-disjoint split
+
+`scripts/make_speaker_split.py` pools all clips and assigns every speaker to one split: test and valid
+get the same number of speakers per dialect region (from different municipalities where possible),
+the rest goes to train. Only speakers with a known municipality are kept. Run it after
+`build_zip_geo.py`; a split never changes once written (new `--name` for a new one):
+
+```bash
+uv run python scripts/make_speaker_split.py data/stt4sg-350_v2-1 --name speakers_v1 --test-per-region 8
+uv run train run_name=dev logger=none data.split_dir=data/stt4sg-350_v2-1/splits/speakers_v1
+```
+
+Batches then carry each speaker's location: `bfs_nr`, `municipality`, `lv95` (E, N in m) and
+`latlon` (municipality centroid).
+
+`data.segment_duration=30` turns items into ~30 s of one speaker: consecutive clips are joined
+(regrouped every epoch for train, fixed for valid/test, nothing dropped), optionally with
+`data.segment_gap` seconds of silence in between.
+
+Without `data.split_dir`, the official split is used: `train_all.tsv` (or `data.train_split=train_balanced`), `valid.tsv`, `test.tsv`.
 
 ```bash
 uv run train run_name=dev logger=none

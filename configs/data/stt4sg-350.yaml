@@ -2,8 +2,13 @@ _target_: maloney.data.stt4sg.STT4SGDataModule
 data_dir: ${paths.data_dir}/stt4sg-350_v2-1
 audio_h5: ${.data_dir}/audio_16k.h5  # from scripts/pack_stt4sg_h5.submit
 train_split: train_all  # or train_balanced (balanced across dialect regions)
+split_dir: null         # e.g. ${.data_dir}/splits/speakers_v1 (scripts/make_speaker_split.py); replaces the official split
+geo_table: ${.data_dir}/zip_municipality.csv  # speaker locations (scripts/build_zip_geo.py); null to skip
 only_split: null        # e.g. test: read only test.tsv and use it for all splits (smoke tests)
 sample_rate: 16000
 max_duration: null      # seconds; drop longer clips
+segment_duration: null  # seconds, e.g. 20 or 30: join clips of one speaker into items of about this length
+segment_gap: 0.0        # seconds of silence between joined clips
+seed: ${seed}           # grouping of clips into segments
 batch_size: 32
 num_workers: 8
