@@ -1,0 +1,21 @@
+# @package _global_
+
+defaults:
+  - _self_
+  - paths: default
+  - data: stt4sg-350
+  - logger: wandb
+  - hydra: default
+  - experiment: null
+
+task_name: train
+
+run_name: ???
+
+tags: ["dev"]
+
+monitor: val/recon
+
+ckpt_path: null
+
+seed: 1234

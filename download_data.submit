@@ -1,0 +1,76 @@
+#!/bin/bash
+#SBATCH --time=720
+#SBATCH --job-name=gugus_tts_prep_dataset
+#SBATCH --ntasks=1
+#SBATCH --cpus-per-task=2
+#SBATCH --nodes=1
+#SBATCH --mem=4G
+#SBATCH --partition=cpu
+#SBATCH --account=cai_nlp
+#SBATCH --mail-user=saaf@zhaw.ch
+#SBATCH --mail-type=END,FAIL
+#SBATCH --output=logs/slurm/%j_%N.out
+#SBATCH --error=logs/slurm/%j_%N.err
+#SBATCH --open-mode=append
+
+# Download a shared Dropbox folder (or file) and unpack it into data/<name>/.
+# Needs no GPU, so it does not source scripts/slurm_setup.sh.
+#
+#   sbatch download_data.submit "<dropbox link>" <name>
+#   DATA_URL="<dropbox link>" DATA_NAME=<name> sbatch download_data.submit
+#   bash download_data.submit "<dropbox link>" <name>      # without SLURM
+#
+# Env: DATA_DIR (default data), KEEP_ZIP=1 keeps the downloaded archive, FORCE=1 overwrites an
+# existing data/<name>/. Dropbox refuses to zip folders that are too large (roughly >20 GB or
+# >10k files) via a link; split those into several shared subfolders.
+
+set -euo pipefail
+cd "${SLURM_SUBMIT_DIR:-$(pwd)}"
+
+DATA_URL="${1:-${DATA_URL:-}}"
+DATA_NAME="${2:-${DATA_NAME:-}}"
+DATA_DIR="${DATA_DIR:-data}"
+if [ -z "${DATA_URL}" ] || [ -z "${DATA_NAME}" ]; then
+    echo "usage: sbatch download_data.submit <dropbox link> <name>" >&2
+    exit 1
+fi
+
+# A shared link opens the preview page with dl=0; dl=1 makes Dropbox send the file (a zip for folders).
+case "${DATA_URL}" in
+    *dl=0*) DATA_URL="${DATA_URL/dl=0/dl=1}" ;;
+    *dl=1*) ;;
+    *\?*)   DATA_URL="${DATA_URL}&dl=1" ;;
+    *)      DATA_URL="${DATA_URL}?dl=1" ;;
+esac
+
+TARGET="${DATA_DIR}/${DATA_NAME}"
+if [ -e "${TARGET}" ] && [ "${FORCE:-0}" != "1" ]; then
+    echo "ERROR: ${TARGET} already exists (set FORCE=1 to overwrite)" >&2
+    exit 1
+fi
+command -v unzip >/dev/null 2>&1 || { echo "ERROR: unzip not found on $(hostname)" >&2; exit 1; }
+mkdir -p "${DATA_DIR}"
+ARCHIVE="${DATA_DIR}/.${DATA_NAME}.download"
+
+if [ -f "${ARCHIVE}" ] && unzip -tq "${ARCHIVE}" >/dev/null 2>&1; then
+    echo "[$(date +%T)] reusing ${ARCHIVE} ($(du -h "${ARCHIVE}" | cut -f1)) from an earlier run"
+else
+    echo "[$(date +%T)] downloading ${DATA_NAME} on $(hostname) -> ${ARCHIVE}"
+    curl --location --fail --retry 10 --retry-delay 30 --retry-all-errors \
+        --no-progress-meter --output "${ARCHIVE}" "${DATA_URL}"
+    echo "[$(date +%T)] downloaded $(du -h "${ARCHIVE}" | cut -f1)"
+fi
+
+rm -rf "${TARGET}"
+mkdir -p "${TARGET}"
+if unzip -tq "${ARCHIVE}" >/dev/null 2>&1; then
+    echo "[$(date +%T)] extracting into ${TARGET}"
+    unzip -q -o "${ARCHIVE}" -x / -d "${TARGET}"
+    [ "${KEEP_ZIP:-0}" = "1" ] || rm -f "${ARCHIVE}"
+else
+    # A shared single file arrives as-is; keep its name from the link.
+    FILE_NAME="$(basename "${DATA_URL%%\?*}")"
+    mv "${ARCHIVE}" "${TARGET}/${FILE_NAME}"
+fi
+
+echo "[$(date +%T)] done: ${TARGET} ($(du -sh "${TARGET}" | cut -f1), $(find "${TARGET}" -type f | wc -l) files)"
