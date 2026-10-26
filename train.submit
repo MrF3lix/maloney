@@ -4,7 +4,7 @@
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=10
 #SBATCH --nodes=1
-#SBATCH --partition=gpu_top
+#SBATCH --partition=gpu
 #SBATCH --mem=24G
 #SBATCH --gres=gpu:1
 #SBATCH --account=cai_nlp
