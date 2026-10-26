@@ -99,6 +99,17 @@ uv run train run_name=smoke logger=none model.name=openai/whisper-tiny trainer.d
     trainer.epochs=1 trainer.limit_train_batches=10 trainer.limit_eval_batches=5   # local smoke test
 ```
 
+### Results
+
+`playground/03_results.ipynb` collects the runs in `logs/` (config, `metrics.json`, predictions) into tables
+(best run per method and mode, chosen on valid, reported on test), sweep curves, maps, dialect-region
+confusions and the error against the distance to the nearest training municipality. Its first cell selects
+the runs to report. Copy the results from the cluster without the checkpoints:
+
+```bash
+rsync -av --include='*/' --include='metrics.json' --include='*.yaml' --include='predictions_*.csv' --exclude='*' <cluster>:<repo>/logs/ logs/
+```
+
 ### Speaker-disjoint split
 
 `scripts/make_speaker_split.py` pools all clips and assigns every speaker to one split: test and valid

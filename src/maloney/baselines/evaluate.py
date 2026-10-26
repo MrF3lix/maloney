@@ -100,6 +100,7 @@ def evaluate(cells: np.ndarray, units: pd.DataFrame, geo: GeoContext,
         "mean_km": float(km.mean()),
         "median_km": float(np.median(km)),
     }
-    predictions = units.assign(pred_cell=cells, true_cell=true_cells, pred_region=regions,
+    predictions = units.assign(pred_cell=cells, pred_E=grid.midpoints[cells, 0], pred_N=grid.midpoints[cells, 1],
+                               true_cell=true_cells, pred_region=regions,
                                pred_region_majority=majority, error_km=km, chebyshev=chebyshev)
     return metrics, predictions
