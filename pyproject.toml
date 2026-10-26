@@ -15,6 +15,7 @@ dependencies = [
     "omegaconf>=2.3.1",
     "pandas>=2.2",
     "rootutils>=1.0.7",
+    "scikit-learn>=1.9.1",
     "shapely>=2.2.0",
     "soundfile>=0.13",
     "soxr>=0.5",
@@ -38,6 +39,7 @@ geo = [
 
 [project.scripts]
 train = "maloney.train:main"
+baseline = "maloney.baselines.run:main"
 
 [build-system]
 requires = ["hatchling"]

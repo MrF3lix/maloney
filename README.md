@@ -61,6 +61,27 @@ sbatch scripts/extract_whisper_embeddings.submit data/stt4sg-350_v2-1
 segment (`for_segments`, for `SpeakerSegmentSampler` groups) or per speaker (`by_speaker`), pooling
 clips weighted by their number of frames.
 
+### Baselines
+
+`uv run baseline` fits one method on the precomputed embeddings of the train split and evaluates
+valid and test with the paper's metrics (dialect-region accuracy/F1, cell accuracy, Acc@0-3,
+mean/median km), per unit and per speaker. `method=` picks B1-M2 (`configs/method/`):
+
+| method | | mapping mode matters for |
+|---|---|---|
+| `b1` | logistic regression on dialect region | nothing (no grid) |
+| `b2` | nearest cell prototype (cosine) | the predictions |
+| `m1` | logistic regression on centroid cells | recovering the region |
+| `m2` | prototype network (projection + temperature) | recovering the region |
+
+```bash
+uv run baseline method=b2 geo.mapping.mode=gaussian data.split_dir=data/stt4sg-350_v2-1/splits/speakers_v1
+uv run baseline -m method=b1,b2,m1,m2 geo.mapping.mode=centroid,uniform,gaussian unit=segment data.segment_duration=30
+```
+
+`unit=clip|segment|speaker` sets what is classified; `embeddings.layer` the Whisper layer. Metrics go to
+`metrics.json`, per-unit predictions to `predictions_<split>_<unit>.csv` in the run directory.
+
 ### Speaker-disjoint split
 
 `scripts/make_speaker_split.py` pools all clips and assigns every speaker to one split: test and valid
