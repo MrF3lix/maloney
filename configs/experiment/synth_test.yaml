@@ -1,0 +1,8 @@
+# @package _global_
+
+defaults:
+  - override /data: stt4sg-350_synth
+
+run_name: synth_test
+
+tags: ["synth_test"]

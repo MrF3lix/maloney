@@ -30,7 +30,7 @@ import pandas as pd
 import soundfile as sf
 
 from anonymizer.globi import GlobiClient, GlobiError
-from maloney.data.stt4sg import read_h5_index
+from maloney.data.meta import read_h5_index
 
 log = logging.getLogger(__name__)
 

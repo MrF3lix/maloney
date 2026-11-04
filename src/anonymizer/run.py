@@ -28,7 +28,7 @@ rootutils.setup_root(__file__, indicator=".project-root", pythonpath=True)
 from anonymizer.globi import GlobiClient  # noqa: E402
 from anonymizer.pack import pack  # noqa: E402
 from anonymizer.synth import ClipReader, generate, plan_clips, plan_speakers, read_results, speaker_table  # noqa: E402
-from maloney.data.stt4sg import read_h5_index, read_split  # noqa: E402
+from maloney.data.meta import read_h5_index, read_split  # noqa: E402
 
 CONFIG_PATH = str(Path(__file__).resolve().parents[2] / "configs")
 STAGES = ("plan", "generate", "pack")

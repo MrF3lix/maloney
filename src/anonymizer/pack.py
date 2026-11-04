@@ -32,7 +32,7 @@ import pandas as pd
 import soundfile as sf
 import soxr
 
-from maloney.data.stt4sg import SPLITS, read_h5_index, read_split
+from maloney.data.meta import SPLITS, read_h5_index, read_split
 
 log = logging.getLogger(__name__)
 
