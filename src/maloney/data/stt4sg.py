@@ -81,8 +81,17 @@ class LabelVocab:
 
 
 def read_h5_index(audio_h5: str | Path) -> tuple[pd.DataFrame, int]:
-    """The packed file's clip index (path -> offset, length) and its sample rate."""
+    """The packed file's clip index (path -> offset, length) and its sample rate.
+
+    `audio` may be a virtual dataset linking to other files (the synthetic test split of
+    anonymizer.pack); a missing linked file would read as silence, so it is an error here.
+    """
     with h5py.File(audio_h5, "r") as f:
+        if f["audio"].is_virtual:
+            for source in {vs.file_name for vs in f["audio"].virtual_sources()} - {"."}:
+                if not (Path(audio_h5).parent / source).is_file():
+                    raise FileNotFoundError(f"{audio_h5} links to the audio of {source} (relative to its folder), "
+                                            "which does not exist")
         index = pd.DataFrame({"offset": f["offset"][:], "length": f["length"][:]},
                              index=pd.Index(f["path"].asstr()[:], name="path"))
         return index, int(f.attrs["sample_rate"])

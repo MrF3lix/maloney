@@ -41,13 +41,14 @@ geo = [
 [project.scripts]
 train = "maloney.train:main"
 baseline = "maloney.baselines.run:main"
+anonymize = "anonymizer.run:main"
 
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/maloney"]
+packages = ["src/maloney", "src/anonymizer"]
 
 [tool.uv]
 conflicts = [[{ extra = "cu126" }, { extra = "cu128" }, { extra = "rocm" }]]

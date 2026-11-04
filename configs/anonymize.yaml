@@ -1,0 +1,39 @@
+# @package _global_
+# Synthetic test speakers with the globi anonymizer: uv run anonymize (see anonymizer.run)
+
+defaults:
+  - _self_
+  - paths: default
+  - data: stt4sg-350   # the source: its split_dir/test.tsv and audio_h5
+  - hydra: default
+  - experiment: null
+
+task_name: anonymize
+
+run_name: ${synth.name}
+
+stages: [plan, generate, pack]
+
+globi:
+  url: http://spark-b2f4.tail13dd45.ts.net:8010
+  concurrency: 32              # jobs in flight; the gateway queues them for its workers
+  poll_interval: 1.0           # seconds between status checks of a job
+  timeout: 60                  # seconds per HTTP request
+  retries: 5                   # per request, on connection errors, 429 and 5xx (exponential backoff)
+  job_timeout: 900             # seconds until a queued or running job counts as failed
+  max_consecutive_failures: 50 # stop the run (gateway down?)
+  status_interval: 1.0         # seconds between logs of the gateway's queue; null = off
+
+synth:
+  name: stt4sg-350_synth
+  out_dir: ${paths.data_dir}/${.name}
+  split: test                  # the split that is extended; its speakers are the sources
+  donor_split: test            # donors (voices) come from this split, always from another dialect region
+  n_donors: 5                  # synthetic speakers per source speaker
+  clips_per_speaker: null      # clips of a source speaker re-spoken by every donor; null = all
+  max_speakers: null           # source speakers, spread over the dialect regions; null = all (smoke tests)
+  max_target_seconds: 27       # globi's limit for the target; longer clips are skipped
+  reference_seconds: 20        # donor clips are joined to about this length
+  include_original: true       # the test split also keeps the source's clips (synthetic = False)
+
+seed: 1234

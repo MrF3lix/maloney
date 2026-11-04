@@ -141,3 +141,31 @@ packed as above), `data.only_split=test` reads just that split and uses it for t
 ```bash
 uv run train run_name=smoke logger=none data.only_split=test
 ```
+
+### Synthetic test speakers
+
+`uv run anonymize` (package `src/anonymizer`, config `configs/anonymize.yaml`) extends the test split
+with synthetic speakers made by the globi anonymizer (XTTS v2 fine-tuned on Swiss German, running at
+`globi.url`). Every test speaker X gets `synth.n_donors` donors from other dialect regions, and
+every donor re-speaks X's clips in X's dialect. Each (X, donor) pair is a new speaker: X's location
+labels with the donor's voice (and age, gender). The source is the `data` config, by default
+`data.split_dir`'s `test.tsv` and its `audio_16k.h5`:
+
+```bash
+uv run anonymize synth.max_speakers=6 synth.clips_per_speaker=5   # a quick look
+uv run anonymize                                                  # every test speaker, all clips
+uv run anonymize 'stages=[pack]'                                  # only rebuild the dataset folder
+```
+
+A rerun with the same settings resumes and retries failed clips (`results.jsonl`). The output,
+`data/stt4sg-350_synth`, replaces the source data folder: `splits/<name>/` has the source's train and
+valid tsvs and the new test.tsv (the synthetic clips, `synthetic` = True, plus the original test clips
+with `synth.include_original`); `audio_16k.h5` links to the source's audio file (an HDF5 virtual
+dataset, nothing is copied) and adds the synthetic clips at 16 kHz. Keep both folders next to each other:
+
+```bash
+uv run train data=stt4sg-350_synth run_name=synth_test
+```
+
+Baselines need embeddings of the new clips too: run `scripts/extract_whisper_embeddings.py` on
+`data/stt4sg-350_synth` (it embeds the whole linked audio file, or `--tsv` a subset).
