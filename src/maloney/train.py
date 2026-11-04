@@ -32,6 +32,7 @@ from maloney.baselines.evaluate import GeoContext, evaluate  # noqa: E402
 from maloney.baselines.methods import NearestPrototype  # noqa: E402
 from maloney.baselines.run import evaluate_method, log_results  # noqa: E402
 from maloney.baselines.units import unit_table  # noqa: E402
+from maloney.embeddings.whisper import fast_dtype  # noqa: E402
 from maloney.geo import Geolects  # noqa: E402
 from maloney.models.whisper_geo import WhisperCollate, WhisperGeoClassifier, class_index  # noqa: E402
 from maloney.training.loggers import build_logger  # noqa: E402
@@ -55,10 +56,9 @@ class HeadMethod:
 
 
 def autocast_dtype(device: torch.device, precision: str) -> torch.dtype | None:
+    """The autocast precision: `auto` takes what the GPU computes fast (fast_dtype), None means float32."""
     if precision == "auto":
-        if device.type != "cuda":
-            return None
-        return torch.bfloat16 if torch.cuda.is_bf16_supported() else torch.float16
+        return fast_dtype(device)
     return {"bf16": torch.bfloat16, "fp16": torch.float16, "fp32": None}[precision]
 
 
@@ -110,8 +110,10 @@ def train(cfg: DictConfig):
     if weight_dtypes != {torch.float32}:
         raise ValueError(f"the model weights must be float32 for training, got {weight_dtypes}")
     total, trainable = model.n_parameters()
-    log.info("%s pooled at layer %d: %.1fM parameters, %.1fM trainable; %s, autocast %s", mc.name,
-             model.pool_layer, total / 1e6, trainable / 1e6, device, dtype)
+    gpu = f" ({torch.cuda.get_device_name(device)}, compute capability {'.'.join(map(str, torch.cuda.get_device_capability(device)))})" \
+        if device.type == "cuda" else ""
+    log.info("%s pooled at layer %d: %.1fM parameters, %.1fM trainable; %s%s, autocast %s", mc.name,
+             model.pool_layer, total / 1e6, trainable / 1e6, device, gpu, dtype)
 
     collate = WhisperCollate(mc.name)
     train_loader = datamodule.dataloader("train", collate_fn=collate, batch_size=tc.batch_size)

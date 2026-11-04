@@ -13,11 +13,11 @@ task_name: train
 
 run_name: ???
 
-tags: ["dev"]
+tags: ["dev", "whisper-small"]
 
 # M3: Whisper encoder + linear head over the centroid cells of the training municipalities.
 model:
-  name: openai/whisper-large-v3  # any Whisper checkpoint on the HF Hub
+  name: openai/whisper-small  # any Whisper checkpoint on the HF Hub
   pool_layer: null               # encoder layer that is mean-pooled (null = last); higher layers are dropped
   freeze_layers: 0               # lowest transformer layers kept fixed (the conv front end always is)
   dropout: 0.0                   # before the head
@@ -34,7 +34,7 @@ trainer:
   batch_size: 8             # items (clips or segments) per batch
   eval_batch_size: 32
   accumulate: 1             # optimizer step every this many batches
-  precision: auto           # auto (bf16, or fp16 without bf16 support, on CUDA; fp32 elsewhere) | bf16 | fp16 | fp32
+  precision: auto           # auto: bf16 on Ampere+, fp16 on Volta/Turing, fp32 on older GPUs (P40) and CPU | bf16 | fp16 | fp32
   device: null              # default: cuda if available, else cpu
   log_every: 50             # optimizer steps
   limit_train_batches: null # for smoke tests

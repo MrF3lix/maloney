@@ -15,9 +15,22 @@ from __future__ import annotations
 import numpy as np
 import torch
 from transformers import WhisperFeatureExtractor, WhisperModel
-
+ 
 SAMPLE_RATE = 16_000
 CHUNK = 30 * SAMPLE_RATE  # samples per encoder input
+
+
+def fast_dtype(device: torch.device) -> torch.dtype | None:
+    """The reduced precision a GPU computes fast, or None (float32).
+
+    bf16 needs Ampere or newer (compute capability 8.0); fp16 has tensor cores from Volta/Turing (7.x).
+    Older GPUs like the Pascal P40 (6.1) compute fp16 at 1/64 of their float32 speed, and
+    torch.cuda.is_bf16_supported() is True there too, through slow emulation.
+    """
+    if device.type != "cuda":
+        return None
+    major, _ = torch.cuda.get_device_capability(device)
+    return torch.bfloat16 if major >= 8 else torch.float16 if major >= 7 else None
 
 
 def default_layers(n_layers: int, n_keep: int = 8) -> list[int]:
@@ -68,7 +81,7 @@ class WhisperEmbedder:
                  device: str | None = None, dtype: torch.dtype | None = None):
         self.model_name = model
         self.device = torch.device(device or ("cuda" if torch.cuda.is_available() else "cpu"))
-        self.dtype = dtype or (torch.float16 if self.device.type == "cuda" else torch.float32)
+        self.dtype = dtype or fast_dtype(self.device) or torch.float32
         self.features = WhisperFeatureExtractor.from_pretrained(model)
         self.encoder = WhisperModel.from_pretrained(model, dtype=self.dtype).get_encoder().to(self.device).eval()
         n_layers = self.encoder.config.encoder_layers

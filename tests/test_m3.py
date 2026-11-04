@@ -20,6 +20,15 @@ def test_head_method():
     assert scores[1].argmax() == 0
 
 
+@pytest.mark.parametrize("capability, expected", [((6, 1), None), ((7, 0), torch.float16), ((7, 5), torch.float16),
+                                                  ((8, 0), torch.bfloat16), ((9, 0), torch.bfloat16)])
+def test_autocast_dtype_by_gpu(monkeypatch, capability, expected):
+    # P40 (6.1): fp16 at 1/64 speed and only emulated bf16 -> float32; V100/T4: fp16; A100/H100: bf16
+    monkeypatch.setattr(torch.cuda, "get_device_capability", lambda device=None: capability)
+    assert autocast_dtype(torch.device("cuda"), "auto") == expected
+    assert autocast_dtype(torch.device("cuda"), "fp16") == torch.float16  # explicit choices stay
+
+
 def test_autocast_dtype():
     assert autocast_dtype(torch.device("cpu"), "auto") is None
     assert autocast_dtype(torch.device("cpu"), "bf16") == torch.bfloat16
