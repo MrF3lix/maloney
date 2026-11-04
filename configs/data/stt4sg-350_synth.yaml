@@ -1,0 +1,9 @@
+# STT4SG-350 with the synthetic test split of `uv run anonymize` (data/stt4sg-350_synth): train and
+# valid as in stt4sg-350, the test split extended with synthetic speakers. audio_16k.h5 there links to
+# the source's audio file, so both folders must be present.
+defaults:
+  - stt4sg-350
+  - _self_
+
+data_dir: ${paths.data_dir}/stt4sg-350_synth
+split_dir: ${.data_dir}/splits/speakers_v1  # the source's split name; null if it was made from the release tsvs
