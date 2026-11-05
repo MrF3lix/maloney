@@ -33,8 +33,17 @@ def read_split(data_dir: str | Path, split: str, train_split: str = "train_all",
         file = Path(split_dir) / f"{split}.tsv"
     else:
         file = Path(data_dir) / (TRAIN_FILES[train_split] if split == "train" else f"{split}.tsv")
-    # quoting=3 (QUOTE_NONE): sentences contain quotes, and zipcodes must stay strings.
-    return pd.read_csv(file, sep="\t", quoting=3, dtype={"zipcode": str, "client_id": str})
+    return read_tsv(file)
+
+
+def read_tsv(file: str | Path, **kwargs) -> pd.DataFrame:
+    """Read a tsv in the release's format, with zip codes as strings ("8001")."""
+    # quoting=3 (QUOTE_NONE): sentences contain quotes, and zipcodes must stay strings. Some copies of
+    # train_all/train_balanced.tsv store them as floats ("8001.0"), which would match no zip elsewhere.
+    meta = pd.read_csv(file, sep="\t", quoting=3, dtype={"zipcode": str, "client_id": str}, **kwargs)
+    if "zipcode" in meta:
+        meta["zipcode"] = meta["zipcode"].str.strip().str.removesuffix(".0")
+    return meta
 
 
 def read_geo_table(geo_table: str | Path) -> pd.DataFrame:

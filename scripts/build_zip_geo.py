@@ -33,6 +33,8 @@ from pathlib import Path
 import geopandas as gpd
 import pandas as pd
 
+from maloney.data.meta import read_tsv
+
 log = logging.getLogger("build_zip_geo")
 
 TSVS = ("train_all.tsv", "valid.tsv", "test.tsv")  # train_balanced is a subset of train_all
@@ -44,10 +46,8 @@ def read_speakers(data_dir: Path) -> pd.DataFrame:
     if not tsvs:
         raise SystemExit(f"no tsv files in {data_dir}")
     log.info("reading %s", ", ".join(t.name for t in tsvs))
-    clips = pd.concat(pd.read_csv(t, sep="\t", quoting=3, dtype={"zipcode": str, "client_id": str},
-                                  usecols=["path", "duration", "client_id", "zipcode", "canton", "dialect_region"])
+    clips = pd.concat(read_tsv(t, usecols=["path", "duration", "client_id", "zipcode", "canton", "dialect_region"])
                       for t in tsvs).drop_duplicates("path")
-    clips["zipcode"] = clips["zipcode"].str.strip()
     per_zip = clips.groupby("zipcode").agg(
         n_speakers=("client_id", "nunique"), n_clips=("path", "size"), hours=("duration", "sum"),
         dialect_region=("dialect_region", lambda s: s.mode().iloc[0]),

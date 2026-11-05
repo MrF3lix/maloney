@@ -12,9 +12,11 @@ import numpy as np
 import pandas as pd
 import pytest
 import soundfile as sf
+from omegaconf import OmegaConf
 
 from anonymizer.globi import GlobiClient, GlobiError
 from anonymizer.pack import pack, pack_h5
+from anonymizer.run import make_plan, split_settings
 from anonymizer.synth import ClipReader, QueueMonitor, generate, plan_clips, plan_speakers, read_results, speaker_table
 from maloney.data.stt4sg import STT4SGDataModule, read_h5_index, read_split
 
@@ -194,7 +196,7 @@ def test_generate_and_pack_is_a_drop_in_test_split(tmp_path, globi):
 
     test = read_split(src, "test", split_dir=split_dir)
     speakers = plan_speakers(speaker_table(test), speaker_table(test), n_donors=2, seed=0)
-    plan = plan_clips(test, speakers, clips_per_speaker=2, max_target_seconds=27, seed=0)
+    plan = plan_clips(test, speakers, clips_per_speaker=2, max_target_seconds=27, seed=0).assign(split="test")
     plan.loc[0, "sentence"] = "kaputt"  # one job fails on the gateway
     out = tmp_path / "out"
     reader = ClipReader(src / "audio_16k.h5")
@@ -207,7 +209,7 @@ def test_generate_and_pack_is_a_drop_in_test_split(tmp_path, globi):
     generate(plan, test, reader, globi, out, reference_seconds=3, concurrency=4, seed=0)
     assert len(read_results(out / "results.jsonl")) == len(plan)
 
-    pack(data_cfg, plan, read_results(out / "results.jsonl"), out, "test", include_original=True)
+    pack(data_cfg, plan, read_results(out / "results.jsonl"), out, ["test"], include_original=True)
     dm = STT4SGDataModule(str(out), str(out / "audio_16k.h5"), split_dir=str(out / "splits" / "speakers_v1"))
     dm.setup()
     assert len(dm.datasets["train"]) == len(read_split(src, "train", split_dir=split_dir))
@@ -218,6 +220,59 @@ def test_generate_and_pack_is_a_drop_in_test_split(tmp_path, globi):
     assert synth_item["zipcode"] == source_row["zipcode"] and synth_item["client_id"] != source_row["client_id"]
     assert len(synth_item["audio"]) == pytest.approx(source_row["length"], abs=2)
     assert len(pd.read_csv(out / "speakers.csv")) == len(speakers)
+
+
+def test_split_settings():
+    sc = OmegaConf.create({"n_donors": 6, "clips_per_speaker": 50, "max_speakers": None,
+                           "per_split": {"train": {"n_donors": 10}, "test": {"clips_per_speaker": None}}})
+    assert split_settings(sc, "train") == {"n_donors": 10, "clips_per_speaker": 50, "max_speakers": None}
+    assert split_settings(sc, "test") == {"n_donors": 6, "clips_per_speaker": None, "max_speakers": None}
+    assert split_settings(sc, "valid") == {"n_donors": 6, "clips_per_speaker": 50, "max_speakers": None}
+    sc.per_split.valid = {"n_donor": 3}
+    with pytest.raises(ValueError, match="unknown settings"):
+        split_settings(sc, "valid")
+
+
+def test_every_split_is_extended_with_its_own_speakers(tmp_path, globi):
+    """train, valid and test each get synthetic speakers whose sources and donors are of that split only."""
+    rng = np.random.default_rng(0)
+    src = tmp_path / "src"
+    meta = make_meta(n_speakers_per_region=4, n_clips=3)
+    split_dir = src / "splits" / "speakers_v1"
+    split_dir.mkdir(parents=True)
+    assignment = {"train": ["0", "1"], "valid": ["2"], "test": ["3"]}
+    for split, ids in assignment.items():
+        meta[meta["client_id"].str[-1].isin(ids)].to_csv(split_dir / f"{split}.tsv", sep="\t", index=False,
+                                                          quoting=3)
+    write_base_h5(src / "audio_16k.h5", meta, rng)
+    data_cfg = SimpleNamespace(data_dir=str(src), split_dir=str(split_dir), train_split="train_all",
+                               audio_h5=str(src / "audio_16k.h5"), geo_table=None)
+    metas = {split: read_split(src, split, split_dir=split_dir) for split in assignment}
+    plan = pd.concat([make_plan(metas[split], split, n_donors=2 if split == "train" else 1, clips_per_speaker=2,
+                                max_speakers=None, max_target_seconds=27, seed=0) for split in assignment],
+                     ignore_index=True)
+    for split, m in metas.items():
+        part = plan[plan["split"] == split]
+        assert set(part["source_client_id"]) == set(m["client_id"])
+        assert set(part["donor_client_id"]) <= set(m["client_id"])  # no voice crosses splits
+    assert plan["path"].is_unique
+
+    out = tmp_path / "out"
+    generate(plan, pd.concat(metas.values()), ClipReader(src / "audio_16k.h5"), globi, out, reference_seconds=3,
+             concurrency=4, seed=0)
+    pack(data_cfg, plan, read_results(out / "results.jsonl"), out, list(assignment), include_original=True)
+    dm = STT4SGDataModule(str(out), str(out / "audio_16k.h5"), split_dir=str(out / "splits" / "speakers_v1"))
+    dm.setup()
+    for split, m in metas.items():
+        packed = dm.datasets[split].meta
+        assert packed["synthetic"].sum() == (plan["split"] == split).sum()
+        assert len(packed) == len(m) + packed["synthetic"].sum()
+        assert set(packed.loc[packed["synthetic"], "path"]) == set(plan.loc[plan["split"] == split, "path"])
+    speakers = pd.read_csv(out / "speakers.csv")
+    assert speakers.groupby("split").size().to_dict() == {"test": 3, "train": 12, "valid": 3}
+
+    with pytest.raises(ValueError, match="not in synth.splits"):
+        pack(data_cfg, plan, read_results(out / "results.jsonl"), out, ["test"], include_original=True)
 
 
 def test_queue_monitor_logs_the_queue(globi, caplog):

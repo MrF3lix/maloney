@@ -22,6 +22,7 @@ dependencies = [
     "soxr>=0.5",
     "torch>=2.6",
     "transformers>=5.20.2",
+    "umap-learn>=0.5.12",
 ]
 
 [project.optional-dependencies]

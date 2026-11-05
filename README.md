@@ -142,29 +142,39 @@ packed as above), `data.only_split=test` reads just that split and uses it for t
 uv run train run_name=smoke logger=none data.only_split=test
 ```
 
-### Synthetic test speakers
+### Synthetic speakers
 
-`uv run anonymize` (package `src/anonymizer`, config `configs/anonymize.yaml`) extends the test split
-with synthetic speakers made by the globi anonymizer (XTTS v2 fine-tuned on Swiss German, running at
-`globi.url`). Every test speaker X gets `synth.n_donors` donors from other dialect regions, and
-every donor re-speaks X's clips in X's dialect. Each (X, donor) pair is a new speaker: X's location
-labels with the donor's voice (and age, gender). The source is the `data` config, by default
-`data.split_dir`'s `test.tsv` and its `audio_16k.h5`:
+`uv run anonymize` (package `src/anonymizer`, config `configs/anonymize.yaml`) extends the splits in
+`synth.splits` (default train, valid and test) with synthetic speakers made by the globi anonymizer
+(XTTS v2 fine-tuned on Swiss German, running at `globi.url`). Every speaker X of a split gets
+`synth.n_donors` donors from other dialect regions *of the same split*, and every donor re-speaks
+`synth.clips_per_speaker` clips of X in X's dialect. Each (X, donor) pair is a new speaker: X's location
+labels with the donor's voice (and age, gender). As sources and donors never cross splits, the splits
+stay speaker-disjoint in voice too. `synth.per_split.<split>` overrides `n_donors`, `clips_per_speaker`
+and `max_speakers` for one split (by default train gets 10 donors per speaker, and test is the first
+synthetic test split: 5 donors, all clips). The source is the `data` config, by default
+`data.split_dir` and its `audio_16k.h5`:
 
 ```bash
+uv run anonymize stages=[plan]                                    # write plan.tsv, log the sizes per split
 uv run anonymize synth.max_speakers=6 synth.clips_per_speaker=5   # a quick look
-uv run anonymize                                                  # every test speaker, all clips
+uv run anonymize                                                  # everything
+uv run anonymize 'synth.splits=[test]' synth.name=stt4sg-350_synth synth.n_donors=5 synth.clips_per_speaker=null  # test only
 uv run anonymize 'stages=[pack]'                                  # only rebuild the dataset folder
 ```
 
-A rerun with the same settings resumes and retries failed clips (`results.jsonl`). The output,
-`data/stt4sg-350_synth`, replaces the source data folder: `splits/<name>/` has the source's train and
-valid tsvs and the new test.tsv (the synthetic clips, `synthetic` = True, plus the original test clips
-with `synth.include_original`); `audio_16k.h5` links to the source's audio file (an HDF5 virtual
-dataset, nothing is copied) and adds the synthetic clips at 16 kHz. Keep both folders next to each other:
+A rerun with the same settings resumes and retries failed clips (`results.jsonl`); the test and valid
+clips are generated first. A speaker's donors and clips only depend on the seed and its id, so the
+synthetic ids and clip paths of one output folder carry over to another (copying `clips/` and
+`results.jsonl` of `data/stt4sg-350_synth` into the new folder skips the test clips made there).
+The output, `data/stt4sg-350_synth_all`, replaces the source data folder: `splits/<name>/` has the
+extended tsvs (the synthetic clips, `synthetic` = True, plus the original clips with
+`synth.include_original`) and copies of the others; `speakers.csv` lists every synthetic speaker with
+its split, source and donor; `audio_16k.h5` links to the source's audio file (an HDF5 virtual dataset,
+nothing is copied) and adds the synthetic clips at 16 kHz. Keep both folders next to each other:
 
 ```bash
-uv run train data=stt4sg-350_synth run_name=synth_test
+uv run train data=stt4sg-350_synth_all run_name=synth_all
 ```
 
 Baselines need embeddings of the new clips too: run `scripts/extract_whisper_embeddings.py` on

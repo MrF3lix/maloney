@@ -32,7 +32,7 @@ import torch
 from torch.utils.data import DataLoader, Dataset, Sampler
 
 from maloney.data.meta import (  # noqa: F401 - re-exported, the torch-free part of this module
-    GEO_COLUMNS, SPLITS, TRAIN_FILES, read_geo_table, read_h5_index, read_split,
+    GEO_COLUMNS, SPLITS, TRAIN_FILES, read_geo_table, read_h5_index, read_split, read_tsv,
 )
 
 log = logging.getLogger(__name__)

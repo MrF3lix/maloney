@@ -25,15 +25,19 @@ globi:
   status_interval: 1.0         # seconds between logs of the gateway's queue; null = off
 
 synth:
-  name: stt4sg-350_synth
+  name: stt4sg-350_synth_all
   out_dir: ${paths.data_dir}/${.name}
-  split: test                  # the split that is extended; its speakers are the sources
-  donor_split: test            # donors (voices) come from this split, always from another dialect region
-  n_donors: 5                  # synthetic speakers per source speaker
-  clips_per_speaker: null      # clips of a source speaker re-spoken by every donor; null = all
-  max_speakers: null           # source speakers, spread over the dialect regions; null = all (smoke tests)
+  # The splits that are extended, in the order they are generated (the small ones first). Sources and
+  # donors of a synthetic speaker come from the same split, always from other dialect regions.
+  splits: [test, valid, train]
+  n_donors: 6                  # synthetic speakers per source speaker
+  clips_per_speaker: 50        # clips of a source speaker re-spoken by every donor; null = all
+  max_speakers: null           # source speakers per split, spread over the dialect regions; null = all (smoke tests)
+  per_split:                   # overrides of n_donors, clips_per_speaker and max_speakers for one split
+    train: {n_donors: 10}
+    test: {n_donors: 5, clips_per_speaker: null}  # as data/stt4sg-350_synth, the first synthetic test split
   max_target_seconds: 27       # globi's limit for the target; longer clips are skipped
   reference_seconds: 20        # donor clips are joined to about this length
-  include_original: true       # the test split also keeps the source's clips (synthetic = False)
+  include_original: true       # extended splits also keep the source's clips (synthetic = False)
 
 seed: 1234

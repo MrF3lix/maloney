@@ -1,0 +1,8 @@
+# STT4SG-350 with train, valid and test extended by synthetic speakers (`uv run anonymize`,
+# data/stt4sg-350_synth_all). audio_16k.h5 there links to the source's audio file, so both folders must
+# be present. Filter on the `synthetic` column for the original clips only.
+defaults:
+  - stt4sg-350_synth
+  - _self_
+
+data_dir: ${paths.data_dir}/stt4sg-350_synth_all

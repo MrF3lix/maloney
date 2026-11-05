@@ -23,6 +23,8 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
+from maloney.data.meta import read_tsv
+
 log = logging.getLogger("make_speaker_split")
 
 TSVS = ("train_all.tsv", "valid.tsv", "test.tsv")  # train_balanced is a subset of train_all
@@ -34,7 +36,7 @@ def read_clips(data_dir: Path) -> pd.DataFrame:
     if not tsvs:
         raise SystemExit(f"no tsv files in {data_dir}")
     log.info("pooling %s", ", ".join(t.name for t in tsvs))
-    clips = pd.concat(pd.read_csv(t, sep="\t", quoting=3, dtype={"zipcode": str, "client_id": str}) for t in tsvs)
+    clips = pd.concat(read_tsv(t) for t in tsvs)
     return clips.drop_duplicates("path").reset_index(drop=True)
 
 

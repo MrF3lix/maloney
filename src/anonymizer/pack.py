@@ -3,9 +3,9 @@
     out_dir/
         clips/<client_id>/<name>.wav          globi's output (24 kHz)
         plan.tsv  results.jsonl               what was asked for, what came back
-        speakers.csv                          synthetic speaker -> source speaker and donor
-        test.tsv                              (source without split_dir) the synthetic test split
-        splits/<name>/{train,valid,test}.tsv  (source with split_dir) train and valid as in the source
+        speakers.csv                          synthetic speaker -> split, source speaker and donor
+        {train_all,valid,test}.tsv            (source without split_dir) the release's tsvs, extended
+        splits/<name>/{train,valid,test}.tsv  (source with split_dir) the source's split, extended
         zip_municipality.csv                  copy of the source's geo table
         audio_16k.h5                          the source's audio file plus the synthetic clips
 
@@ -15,8 +15,10 @@ part links to the `audio` of the source file (by a path relative to this file, n
 the rest are the synthetic clips, resampled to the source's rate and stored in `synth_audio`. Moving
 the two data folders together keeps the link; the data module checks that it resolves.
 
-The test split holds the synthetic clips (`synthetic` = True) and, with `include_original`, also the
-source's test clips, so the original test results are the subset `synthetic == False`.
+Every extended split holds its synthetic clips (`synthetic` = True) and, with `include_original`, also
+the source's clips of that split, so the original results are the subset `synthetic == False`. Splits
+that are not extended are copied as they are. Without split_dir, an extended train split is written to
+the train list of `train_split` (e.g. train_all.tsv); the other list is copied unchanged.
 """
 
 from __future__ import annotations
@@ -32,7 +34,7 @@ import pandas as pd
 import soundfile as sf
 import soxr
 
-from maloney.data.meta import SPLITS, read_h5_index, read_split
+from maloney.data.meta import SPLITS, TRAIN_FILES, read_h5_index, read_split
 
 log = logging.getLogger(__name__)
 
@@ -47,7 +49,7 @@ def write_tsv(meta: pd.DataFrame, file: Path):
 
 
 def synthetic_meta(plan: pd.DataFrame, results: dict[str, dict], clips_dir: Path) -> pd.DataFrame:
-    """The plan's clips that were generated, with their true duration, as test.tsv rows."""
+    """The plan's clips that were generated, with their true duration, as tsv rows."""
     ok = plan["path"].map(lambda p: results.get(p, {}).get("status") == "completed"
                           and (clips_dir / p).is_file())
     if missing := int((~ok).sum()):
@@ -102,44 +104,52 @@ def pack_h5(base_h5: Path, clips: list[tuple[str, Path]], out: Path):
              len(clips), total / sample_rate / 3600)
 
 
-def pack(data_cfg, plan: pd.DataFrame, results: dict[str, dict], out_dir: Path, split: str,
+def pack(data_cfg, plan: pd.DataFrame, results: dict[str, dict], out_dir: Path, splits: list[str],
          include_original: bool):
-    """Write the dataset folder (module doc) for the synthetic clips of `split`."""
-    synth = synthetic_meta(plan, results, out_dir / "clips")
-    if synth.empty:
+    """Write the dataset folder (module doc) for the synthetic clips of `splits`."""
+    if "split" not in plan:
+        raise ValueError("the plan has no split column (made before several splits were supported): "
+                         "run the plan stage again")
+    if unknown := set(plan["split"]) - set(splits):
+        raise ValueError(f"the plan has clips of {sorted(unknown)}, which are not in synth.splits {splits}")
+    generated = synthetic_meta(plan, results, out_dir / "clips")
+    if generated.empty:
         raise ValueError(f"no generated clip in {out_dir / 'clips'}: run the generate stage first")
     split_dir = Path(data_cfg.split_dir) if data_cfg.split_dir else None
     metas = {s: read_split(data_cfg.data_dir, s, data_cfg.train_split, split_dir) for s in SPLITS}
-    columns = list(metas[split].columns)
-    if include_original:
-        original = metas[split].assign(synthetic=False)
-        synth = pd.concat([original, synth], ignore_index=True)
-    metas[split] = synth[[*columns, "synthetic", *PROVENANCE]]
+    for split in splits:
+        columns = list(metas[split].columns)
+        synth = generated[generated["split"] == split]
+        if include_original:
+            synth = pd.concat([metas[split].assign(synthetic=False), synth], ignore_index=True)
+        metas[split] = synth[[*columns, "synthetic", *PROVENANCE]]
+        new = synth[synth["synthetic"]]
+        log.info("%s split: %d synthetic clips (%.1f h) of %d speakers%s", split, len(new),
+                 new["duration"].sum() / 3600, new["client_id"].nunique(),
+                 f" + {int((~synth['synthetic']).sum())} original clips" if include_original else "")
 
     if split_dir is not None:
         target_dir = out_dir / "splits" / split_dir.name
         for name, meta in metas.items():
             write_tsv(meta, target_dir / f"{name}.tsv")
-        log.info("wrote %s (%s from %s)", target_dir, ", ".join(s for s in SPLITS if s != split), split_dir)
+        log.info("wrote %s (%s extended, the rest from %s)", target_dir, ", ".join(splits), split_dir)
     else:
-        # the release layout: train comes from train_all/train_balanced.tsv, which are copied
-        for name in ("train_all.tsv", "train_balanced.tsv", *(f"{s}.tsv" for s in SPLITS if s not in ("train", split))):
-            if (Path(data_cfg.data_dir) / name).is_file():
+        # the release layout: train comes from train_all/train_balanced.tsv
+        files = {s: TRAIN_FILES[data_cfg.train_split] if s == "train" else f"{s}.tsv" for s in SPLITS}
+        for name in ("train_all.tsv", "train_balanced.tsv", "valid.tsv", "test.tsv"):
+            if name not in (files[s] for s in splits) and (Path(data_cfg.data_dir) / name).is_file():
                 shutil.copyfile(Path(data_cfg.data_dir) / name, out_dir / name)
-        write_tsv(metas[split], out_dir / f"{split}.tsv")
+        for split in splits:
+            write_tsv(metas[split], out_dir / files[split])
     if data_cfg.geo_table and Path(data_cfg.geo_table).is_file():
         shutil.copyfile(data_cfg.geo_table, out_dir / "zip_municipality.csv")
 
     speakers = (plan.drop_duplicates("client_id")
                 .drop(columns=["path", "source_path", "duration", "sentence", "sentence_source"])
-                .merge(synth[synth["synthetic"]].groupby("client_id").agg(
+                .merge(generated.groupby("client_id").agg(
                     n_clips=("path", "size"), hours=("duration", lambda d: d.sum() / 3600)).reset_index(),
                     on="client_id", how="left"))
     speakers.round({"hours": 3}).to_csv(out_dir / "speakers.csv", index=False)
 
-    new = synth[synth["synthetic"]]
-    pack_h5(Path(data_cfg.audio_h5), [(p, out_dir / "clips" / p) for p in new["path"]],
+    pack_h5(Path(data_cfg.audio_h5), [(p, out_dir / "clips" / p) for p in generated["path"]],
             out_dir / Path(data_cfg.audio_h5).name)
-    log.info("%s split: %d synthetic clips (%.1f h) of %d speakers%s", split, len(new),
-             new["duration"].sum() / 3600, new["client_id"].nunique(),
-             f" + {int((~synth['synthetic']).sum())} original clips" if include_original else "")
