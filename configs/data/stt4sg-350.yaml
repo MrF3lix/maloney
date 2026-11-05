@@ -2,7 +2,7 @@ _target_: maloney.data.stt4sg.STT4SGDataModule
 data_dir: ${paths.data_dir}/stt4sg-350_v2-1
 audio_h5: ${.data_dir}/audio_16k.h5  # from scripts/pack_stt4sg_h5.submit
 train_split: train_all  # or train_balanced (balanced across dialect regions)
-split_dir: data/stt4sg-350_v2-1/splits/speakers_v1         # e.g. ${.data_dir}/splits/speakers_v1 (scripts/make_speaker_split.py); replaces the official split
+split_dir: data/stt4sg-350_v2-1/splits/speakers_v2
 geo_table: ${.data_dir}/zip_municipality.csv  # speaker locations (scripts/build_zip_geo.py); null to skip
 only_split: null        # e.g. test: read only test.tsv and use it for all splits (smoke tests)
 sample_rate: 16000
