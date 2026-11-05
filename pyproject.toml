@@ -43,6 +43,7 @@ geo = [
 train = "maloney.train:main"
 baseline = "maloney.baselines.run:main"
 anonymize = "anonymizer.run:main"
+anonymize-zip = "anonymizer.zipfill:main"
 
 [build-system]
 requires = ["hatchling"]

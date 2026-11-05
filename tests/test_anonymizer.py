@@ -18,6 +18,7 @@ from anonymizer.globi import GlobiClient, GlobiError
 from anonymizer.pack import pack, pack_h5
 from anonymizer.run import make_plan, split_settings
 from anonymizer.synth import ClipReader, QueueMonitor, generate, plan_clips, plan_speakers, read_results, speaker_table
+from anonymizer.zipfill import plan_zip_clips, plan_zip_speakers, read_sources, write_dataset
 from maloney.data.stt4sg import STT4SGDataModule, read_h5_index, read_split
 
 REGIONS = ["Basel", "Bern", "Zürich"]
@@ -287,3 +288,48 @@ def test_queue_monitor_logs_the_queue(globi, caplog):
     assert any("not reachable" in r.getMessage() for r in caplog.records)
     with QueueMonitor(globi, interval=None):  # off
         pass
+
+
+def test_zip_codes_are_filled_up_with_balanced_speakers(tmp_path, globi):
+    """Every zip code ends up with as many female as male speakers, at least min_per_gender each."""
+    rng = np.random.default_rng(0)
+    src = tmp_path / "src"
+    meta = make_meta(n_speakers_per_region=6, n_clips=5)
+    meta.loc[meta["client_id"] == "Ba1", "zipcode"] = meta.loc[meta["client_id"] == "Ba0", "zipcode"].iloc[0]
+    split_dir = src / "splits" / "speakers_v1"
+    split_dir.mkdir(parents=True)
+    assignment = {"train": ["0", "1"], "valid": ["2", "3"], "test": ["4", "5"]}
+    for split, ids in assignment.items():
+        part = meta[meta["client_id"].str[-1].isin(ids)]
+        part.to_csv(split_dir / f"{split}.tsv", sep="\t", index=False, quoting=3)
+        part.to_csv(src / f"{'train_all' if split == 'train' else split}.tsv", sep="\t", index=False, quoting=3)
+    write_base_h5(src / "audio_16k.h5", meta, rng)
+    data_cfg = SimpleNamespace(data_dir=str(src), split_dir=str(split_dir), train_split="train_all",
+                               audio_h5=str(src / "audio_16k.h5"), geo_table=None)
+
+    source = read_sources(data_cfg, set(meta["path"]))
+    speakers = speaker_table(source).merge(source.drop_duplicates("client_id")[["client_id", "split", "release"]])
+    new = plan_zip_speakers(speakers, source.groupby("client_id").size(), min_per_gender=2, clips_per_speaker=3,
+                            seed=0)
+    everyone = pd.concat([speakers, new])
+    per_zip = everyone.groupby(["zipcode", "gender"]).size().unstack(fill_value=0)
+    assert (per_zip["female"] == per_zip["male"]).all() and (per_zip >= 2).all().all()
+    assert per_zip.loc[meta.loc[meta["client_id"] == "Ba0", "zipcode"].iloc[0]].tolist() == [2, 2]
+    split_of = speakers.set_index("client_id")["split"]
+    assert (new["donor_client_id"].map(split_of) == new["split"]).all()  # no voice crosses splits
+    assert (new["donor_dialect_region"] != new["dialect_region"]).all()
+    assert not new.groupby("zipcode")["donor_client_id"].apply(lambda d: d.duplicated().any()).any()
+    assert set(new["source_client_id"].map(speakers.set_index("client_id")["zipcode"])) <= set(new["zipcode"])
+
+    plan = plan_zip_clips(source, new, clips_per_speaker=3, max_target_seconds=27, seed=0)
+    assert plan["path"].is_unique and (plan.groupby("client_id").size() == 3).all()
+    out = tmp_path / "out"
+    generate(plan, source, ClipReader(src / "audio_16k.h5"), globi, out, reference_seconds=3, concurrency=4, seed=0)
+    write_dataset(data_cfg, source, plan, out, clips_per_speaker=3, seed=0)
+    dm = STT4SGDataModule(str(out), str(out / "audio_16k.h5"), split_dir=str(out / "splits" / "speakers_v1"))
+    dm.setup()
+    test_meta = dm.datasets["test"].meta
+    assert (test_meta.groupby("client_id").size() == 3).all()
+    assert test_meta["synthetic"].sum() == (plan["split"] == "test").sum()
+    release = pd.concat([read_split(out, s) for s in ("train", "valid", "test")])
+    assert len(release) == 3 * (len(speakers) + len(new))

@@ -1,0 +1,9 @@
+# STT4SG-350 with every zip code filled up to at least 3 female and 3 male speakers, 40 clips each
+# (`uv run anonymize-zip`, data/stt4sg-350_synth_zip). audio_16k.h5 there links to the source's audio
+# file, so both folders must be present. Filter on the `synthetic` column for the original clips only.
+defaults:
+  - stt4sg-350
+  - _self_
+
+data_dir: ${paths.data_dir}/stt4sg-350_synth_zip
+split_dir: ${.data_dir}/splits/speakers_v2

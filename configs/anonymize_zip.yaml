@@ -1,0 +1,34 @@
+# @package _global_
+# Fill up every zip code with synthetic speakers of the globi anonymizer: uv run anonymize-zip (see anonymizer.zipfill)
+
+defaults:
+  - _self_
+  - paths: default
+  - data: stt4sg-350   # the source: the release tsvs, split_dir and audio_h5
+  - hydra: default
+
+task_name: anonymize_zip
+
+run_name: ${synth.name}
+
+stages: [plan, generate, pack]
+
+globi:
+  url: http://spark-b2f4.tail13dd45.ts.net:8010
+  concurrency: 32              # jobs in flight; the gateway queues them for its workers
+  poll_interval: 1.0           # seconds between status checks of a job
+  timeout: 60                  # seconds per HTTP request
+  retries: 5                   # per request, on connection errors, 429 and 5xx (exponential backoff)
+  job_timeout: 900             # seconds until a queued or running job counts as failed
+  max_consecutive_failures: 50 # stop the run (gateway down?)
+  status_interval: 30          # seconds between logs of the gateway's queue; null = off
+
+synth:
+  name: stt4sg-350_synth_zip
+  out_dir: ${paths.data_dir}/${.name}
+  min_per_gender: 3            # speakers of each gender per zip code at least; the smaller gender is filled up to the larger
+  clips_per_speaker: 40        # clips of every speaker, original (subsampled) and synthetic
+  max_target_seconds: 27       # globi's limit for the target; longer clips are not re-spoken
+  reference_seconds: 20        # donor clips are joined to about this length
+
+seed: 1234
